@@ -1,0 +1,196 @@
+{
+  "brand_identity": {
+    "name": "NEXORA",
+    "positioning": "Premium Bangladesh-First Multi-Vendor E-Commerce Marketplace & Seller SaaS Ecosystem",
+    "core_aesthetic": "Fresh, bright, editorial, trustworthy, modern, mobile-first",
+    "target_market": "Bangladesh urban & national consumers and high-growth digital merchants",
+    "forbidden_elements": [
+      "dark theme",
+      "black hero section",
+      "dark footer",
+      "excessive heavy gradients",
+      "cheap discount site vibe",
+      "generic Vercel/Stripe clone styling",
+      "cluttered layouts",
+      "overdesigned heavy glassmorphism"
+    ]
+  },
+  "color_palette": {
+    "primary_emerald": "#10B981",
+    "secondary_mint": "#2DD4BF",
+    "mint_background": "#ECFDF5",
+    "warm_background": "#FFFBF5",
+    "surface_white": "#FFFFFF",
+    "main_text": "#17211B",
+    "muted_text": "#66736B",
+    "border_light": "#E7EEE9",
+    "offer_coral": "#FF6B35",
+    "rating_amber": "#F59E0B",
+    "semantic": {
+      "success": "#10B981",
+      "warning": "#F59E0B",
+      "danger": "#EF4444",
+      "info": "#3B82F6",
+      "badge_discount": "#FF6B35"
+    }
+  },
+  "typography": {
+    "heading_font": "Plus Jakarta Sans, sans-serif",
+    "body_font": "Plus Jakarta Sans, -apple-system, BlinkMacSystemFont, sans-serif",
+    "editorial_serif": "Playfair Display, serif",
+    "mono_font": "JetBrains Mono, monospace",
+    "hierarchy": {
+      "h1_hero": "text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-tight",
+      "h2_section": "text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-[#17211B]",
+      "h3_sub": "text-xl sm:text-2xl font-semibold text-[#17211B]",
+      "h4_card": "text-lg sm:text-xl font-medium text-[#17211B]",
+      "body_regular": "text-base text-[#17211B] leading-relaxed",
+      "body_muted": "text-sm text-[#66736B] leading-normal",
+      "caption": "text-xs font-medium tracking-wide text-[#66736B]"
+    }
+  },
+  "spacing_and_layout": {
+    "philosophy": "Generous but controlled whitespace, soft rounded cards, crisp 1px borders",
+    "container_padding": "px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto",
+    "card_radius": "rounded-2xl",
+    "card_border": "border border-[#E7EEE9]",
+    "card_shadow": "shadow-sm hover:shadow-md transition-shadow duration-200",
+    "grid_modes": {
+      "marketplace_bento": "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6",
+      "seller_dashboard": "grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-5",
+      "featured_banner": "grid grid-cols-1 lg:grid-cols-12 gap-8 items-center"
+    }
+  },
+  "seller_theme_presets": {
+    "rule": "90% Nexora platform structural quality, 10% seller brand customization (tone/accent/layout focus)",
+    "presets": {
+      "fashion_editorial": {
+        "name": "Fashion / Editorial",
+        "bg": "#FFFBF5",
+        "accent": "#17211B",
+        "font": "Playfair Display",
+        "aspect_ratio": "aspect-[3/4]",
+        "vibe": "High contrast, tall imagery, minimal borders, runway elegance"
+      },
+      "cake_bakery_food": {
+        "name": "Cake & Bakery / Warm",
+        "bg": "#FFF8F0",
+        "accent": "#FF6B35",
+        "font": "Plus Jakarta Sans",
+        "aspect_ratio": "aspect-square",
+        "vibe": "Warm appetizing tones, soft rounded cards, artisanal badge highlights"
+      },
+      "electronics_technical": {
+        "name": "Electronics / Technical",
+        "bg": "#F8FAFC",
+        "accent": "#10B981",
+        "font": "JetBrains Mono",
+        "aspect_ratio": "aspect-square",
+        "vibe": "Spec-dense badges, crisp border grids, technical parameters display"
+      },
+      "beauty_elegant": {
+        "name": "Beauty / Elegant",
+        "bg": "#FDF8F6",
+        "accent": "#2DD4BF",
+        "font": "Plus Jakarta Sans",
+        "aspect_ratio": "aspect-[4/5]",
+        "vibe": "Soft pastel tones, smooth pill tags, minimalist photography"
+      },
+      "furniture_home": {
+        "name": "Furniture & Home / Interior",
+        "bg": "#F9F8F6",
+        "accent": "#17211B",
+        "font": "Plus Jakarta Sans",
+        "aspect_ratio": "aspect-[16/10]",
+        "vibe": "Room-scale showcase grids, interior tones, texture callouts"
+      },
+      "grocery_fresh": {
+        "name": "Grocery / Fresh",
+        "bg": "#ECFDF5",
+        "accent": "#10B981",
+        "font": "Plus Jakarta Sans",
+        "aspect_ratio": "aspect-square",
+        "vibe": "High density, instant add-to-cart buttons, freshness guarantee badges"
+      },
+      "jewellery_luxury": {
+        "name": "Jewellery / Luxury Minimal",
+        "bg": "#FAF9F6",
+        "accent": "#F59E0B",
+        "font": "Playfair Display",
+        "aspect_ratio": "aspect-square",
+        "vibe": "Generous framing, subtle amber highlights, detail zoom focus"
+      },
+      "sports_energetic": {
+        "name": "Sports / Energetic",
+        "bg": "#F3F4F6",
+        "accent": "#FF6B35",
+        "font": "Plus Jakarta Sans",
+        "aspect_ratio": "aspect-square",
+        "vibe": "Bold typography, fast add-to-cart, performance parameter tags"
+      },
+      "books_editorial": {
+        "name": "Books / Editorial Catalog",
+        "bg": "#FFFDF9",
+        "accent": "#17211B",
+        "font": "Playfair Display",
+        "aspect_ratio": "aspect-[2/3]",
+        "vibe": "Book spine preview ratios, author metadata, summary tabs"
+      }
+    }
+  },
+  "seller_subscription_plans": [
+    {
+      "id": "start",
+      "name": "START",
+      "price_bdt": 500,
+      "billing": "per month",
+      "features": ["Up to 50 Products", "Standard Shop Theme", "5% Transaction Fee", "Basic Analytics"],
+      "recommended": false
+    },
+    {
+      "id": "grow",
+      "name": "GROW",
+      "price_bdt": 1500,
+      "billing": "per month",
+      "features": ["Up to 500 Products", "All 9 Storefront Presets", "2.5% Transaction Fee", "Advanced Inventory & Visual Store Builder", "Custom Domain Support"],
+      "recommended": true
+    },
+    {
+      "id": "pro",
+      "name": "PRO",
+      "price_bdt": 3000,
+      "billing": "per month",
+      "features": ["Unlimited Products", "Custom Theme Styling & CSS", "1% Transaction Fee", "Priority Bangladesh Support & API Access", "Dedicated Account Manager"],
+      "recommended": false
+    }
+  ],
+  "image_urls": {
+    "fashion": [
+      "https://images.unsplash.com/photo-1753981031189-27bb7bd1c079?crop=entropy&cs=srgb&fm=jpg&q=85",
+      "https://images.unsplash.com/photo-1610313407085-8397d3ac4563?crop=entropy&cs=srgb&fm=jpg&q=85",
+      "https://images.unsplash.com/photo-1610189012906-4c0aa9b9781e?crop=entropy&cs=srgb&fm=jpg&q=85"
+    ],
+    "bakery_food": [
+      "https://images.unsplash.com/photo-1786483694172-df7b1df2221d?crop=entropy&cs=srgb&fm=jpg&q=85",
+      "https://images.unsplash.com/photo-1761222191837-4448599c09fc?crop=entropy&cs=srgb&fm=jpg&q=85"
+    ],
+    "jewellery_traditional": [
+      "https://images.unsplash.com/photo-1669257977776-fc39c92c4147?crop=entropy&cs=srgb&fm=jpg&q=85",
+      "https://images.unsplash.com/photo-1669257965114-225af79f3455?crop=entropy&cs=srgb&fm=jpg&q=85"
+    ]
+  },
+  "interactive_rules": {
+    "test_id_required": true,
+    "test_id_pattern": "kebab-case data-testid on all buttons, links, inputs, cards, menu items, tabs",
+    "hover_states": "All buttons must explicit set hover background and hover text color (e.g. hover:bg-[#0D9668] hover:text-white)",
+    "focus_accessibility": "focus:ring-2 focus:ring-[#10B981] focus:ring-offset-2 outline-none",
+    "mobile_bottom_nav": "Sticky bottom bar on screens < 768px with Home, Categories, Cart (badge), Wishlist, Account"
+  },
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
+    "Strictly follow light theme specification. Never introduce dark hero cards, black backgrounds, or dark footers.",
+    "Use primary emerald (#10B981) for key CTA buttons, price highlights, and positive statuses.",
+    "Ensure all interactive elements have data-testid attributes for automated verification.",
+    "Support the 9 seller storefront theme presets on public merchant pages (/shop/[slug]).",
+    "Ensure seamless responsiveness across mobile, tablet, and desktop viewports."
+  ]
+}

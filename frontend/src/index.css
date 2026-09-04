@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    --nexora-emerald: #10B981;
+    --radius: 0.85rem;
+}
+
+* {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+    margin: 0;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: #FFFBF5;
+    color: #17211B;
+}
+
+::selection {
+    background: #10B981;
+    color: #fff;
+}
+
+/* Slim premium scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #ECFDF5; }
+::-webkit-scrollbar-thumb { background: #b9e6d6; border-radius: 999px; border: 2px solid #ECFDF5; }
+::-webkit-scrollbar-thumb:hover { background: #10B981; }
+
+@layer base {
+    :root {
+        --background: 40 100% 98%;
+        --foreground: 150 20% 11%;
+        --card: 0 0% 100%;
+        --card-foreground: 150 20% 11%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 150 20% 11%;
+        --primary: 160 84% 39%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 152 76% 96%;
+        --secondary-foreground: 150 20% 11%;
+        --muted: 152 30% 96%;
+        --muted-foreground: 150 8% 43%;
+        --accent: 172 66% 50%;
+        --accent-foreground: 150 20% 11%;
+        --destructive: 0 84% 60%;
+        --destructive-foreground: 0 0% 100%;
+        --border: 140 22% 92%;
+        --input: 140 22% 92%;
+        --ring: 160 84% 39%;
+        --radius: 0.85rem;
+    }
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+}
+
+.nx-card {
+    @apply bg-white border border-nexora-border rounded-2xl shadow-sm transition-shadow duration-200;
+}
+.nx-container {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+}
+.nx-btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-nexora-emerald px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-nexora-emeraldDark focus:outline-none focus:ring-2 focus:ring-nexora-emerald focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+}
+.nx-btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-nexora-border bg-white px-5 py-2.5 text-sm font-semibold text-nexora-ink transition-all duration-200 hover:border-nexora-emerald hover:text-nexora-emerald focus:outline-none;
+}
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+@layer base {
+    [data-debug-wrapper="true"] { display: contents !important; }
+}

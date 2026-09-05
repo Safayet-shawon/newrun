@@ -2,12 +2,28 @@ import React from "react";
 import { Star, Loader2, PackageOpen } from "lucide-react";
 import { Link } from "react-router-dom";
 
-export function Logo({ className = "", light = false }) {
+export function Logo({ className = "", light = false, showTagline = false }) {
+  const textColor = light ? "text-white" : "text-[#11201A]";
   return (
-    <Link to="/" className={`flex items-center gap-2 ${className}`} data-testid="nexora-logo">
-      <span className="grid h-9 w-9 place-items-center rounded-xl bg-nexora-emerald text-white font-extrabold text-lg shadow-sm">N</span>
-      <span className={`text-xl font-extrabold tracking-tight ${light ? "text-white" : "text-nexora-ink"}`}>
-        NEXORA
+    <Link to="/" className={`inline-flex items-center gap-2.5 ${className}`} data-testid="nexora-logo" aria-label="NEXORA home">
+      <svg viewBox="0 0 42 34" className="h-8 w-10 shrink-0" aria-hidden="true">
+        <defs>
+          <linearGradient id="nxLogoGreen" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor="#10B981" />
+            <stop offset="1" stopColor="#0A8F68" />
+          </linearGradient>
+          <linearGradient id="nxLogoCoral" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor="#FF8B79" />
+            <stop offset="1" stopColor="#FF6B6B" />
+          </linearGradient>
+        </defs>
+        <path d="M3 6.5C3 3.46 5.46 1 8.5 1h1.1c3.08 0 5.92 1.66 7.43 4.34L21 12.4v14.1c0 3.04-2.46 5.5-5.5 5.5h-.8c-3.04 0-5.5-2.46-5.5-5.5V14.7L5.73 9.64A5.52 5.52 0 0 1 3 6.5Z" fill="url(#nxLogoGreen)"/>
+        <path d="M39 27.5c0 3.04-2.46 5.5-5.5 5.5h-1.1c-3.08 0-5.92-1.66-7.43-4.34L21 21.6V7.5C21 4.46 23.46 2 26.5 2h.8c3.04 0 5.5 2.46 5.5 5.5v11.8l3.47 5.06A5.52 5.52 0 0 1 39 27.5Z" fill="url(#nxLogoGreen)"/>
+        <path d="M21 7.5C21 4.46 23.46 2 26.5 2h.8c3.04 0 5.5 2.46 5.5 5.5v11.8L21 12.4V7.5Z" fill="url(#nxLogoCoral)"/>
+      </svg>
+      <span className="min-w-0 leading-none">
+        <span className={`block text-[21px] font-extrabold tracking-[-0.045em] ${textColor}`}>NEXORA</span>
+        {showTagline && <span className={`mt-1 block whitespace-nowrap text-[8px] font-medium tracking-tight ${light ? "text-white/70" : "text-[#758179]"}`}>More People. More Possibilities.</span>}
       </span>
     </Link>
   );

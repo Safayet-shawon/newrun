@@ -19,7 +19,7 @@ import { useStore } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
 
-export default function Header() {
+export default function Header({ onToggleDesktopSidebar }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { cartCount, wishlist } = useStore();

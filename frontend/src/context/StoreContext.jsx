@@ -13,7 +13,7 @@ const read = (k, fb) => {
   }
 };
 
-const cartKey = (id, variant) => id + (variant || "");
+const cartKey = (id, variant, options = {}, customization = {}) => JSON.stringify([id, variant || "", Object.entries(options).sort(), Object.entries(customization).sort()]);
 
 export function StoreProvider({ children }) {
   const { user } = useAuth();
@@ -34,7 +34,7 @@ export function StoreProvider({ children }) {
       setWishlist([]);
     }
     prevUserId.current = user?.id;
-  }, [user?.id]);
+  }, [user]);
 
   // Hydrate from server on login, merging guest (local) items with saved ones.
   useEffect(() => {
@@ -47,8 +47,8 @@ export function StoreProvider({ children }) {
         setCart((prev) => {
           const map = new Map(prev.map((i) => [i.key, i]));
           (sc.items || []).forEach((si) => {
-            const key = cartKey(si.product.id, si.variant);
-            if (!map.has(key)) map.set(key, { key, product: si.product, qty: si.qty, variant: si.variant });
+            const key = cartKey(si.product.id, si.variant, si.options, si.customization);
+            if (!map.has(key)) map.set(key, { key, product: si.product, qty: si.qty, variant: si.variant, options: si.options || {}, customization: si.customization || {} });
           });
           return Array.from(map.values());
         });
@@ -61,13 +61,13 @@ export function StoreProvider({ children }) {
       } catch { /* ignore */ } finally { if (active) setHydrated(true); }
     })();
     return () => { active = false; };
-  }, [user?.id]);
+  }, [user]);
 
   // Push cart to server (debounced) when authenticated.
   useEffect(() => {
     if (!user || !hydrated) return;
     const t = setTimeout(() => {
-      api.post("/cart/sync", { items: cart.map((i) => ({ product_id: i.product.id, qty: i.qty, variant: i.variant })) }).catch(() => {});
+      api.post("/cart/sync", { items: cart.map((i) => ({ product_id: i.product.id, qty: i.qty, variant: i.variant, options: i.options || {}, customization: i.customization || {} })) }).catch(() => {});
     }, 600);
     return () => clearTimeout(t);
   }, [cart, user, hydrated]);
@@ -80,18 +80,23 @@ export function StoreProvider({ children }) {
     return () => clearTimeout(t);
   }, [wishlist, user, hydrated]);
 
-  const addToCart = useCallback((product, qty = 1, variant = null) => {
+  const addToCart = useCallback((product, qty = 1, variant = null, options = {}, customization = {}) => {
+    if ((product.variants || []).some(v => !v.options.includes(options[v.name])) || (product.product_type === "cake" && !customization.delivery_date)) {
+      toast.error("Choose product options before adding to cart", { action: { label: "Choose options", onClick: () => window.location.assign(`/product/${product.id}`) } }); return false;
+    }
+    if (!Number.isInteger(qty) || qty < 1 || qty > product.stock) { toast.error("Requested quantity is unavailable"); return false; }
     setCart((prev) => {
-      const key = cartKey(product.id, variant);
+      const key = cartKey(product.id, variant, options, customization);
       const existing = prev.find((i) => i.key === key);
-      if (existing) return prev.map((i) => (i.key === key ? { ...i, qty: i.qty + qty } : i));
-      return [...prev, { key, product, qty, variant }];
+      if (existing) return prev.map((i) => (i.key === key ? { ...i, qty: Math.min(product.stock, i.qty + qty) } : i));
+      return [...prev, { key, product, qty, variant, options, customization }];
     });
-    toast.success("Added to cart", { description: product.title });
+    toast.custom((id) => <div className="w-[min(92vw,390px)] rounded-xl border border-nexora-border bg-white p-4 shadow-lg"><p className="font-bold text-nexora-ink">Added to cart</p><p className="mt-1 line-clamp-1 text-sm text-nexora-muted">{product.title}</p><div className="mt-3 flex gap-2"><a href="/checkout" className="nx-btn-primary flex-1 justify-center">Go to Checkout</a><button onClick={()=>toast.dismiss(id)} className="nx-btn-ghost flex-1 justify-center">Continue Shopping</button></div></div>, { duration: 8000 });
+    return true;
   }, []);
 
   const updateQty = useCallback((key, qty) => {
-    setCart((prev) => prev.map((i) => (i.key === key ? { ...i, qty: Math.max(1, qty) } : i)));
+    setCart((prev) => prev.map((i) => (i.key === key ? { ...i, qty: Math.min(i.product.stock, Math.max(1, Math.floor(qty))) } : i)));
   }, []);
 
   const removeFromCart = useCallback((key) => {

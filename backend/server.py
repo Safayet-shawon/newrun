@@ -14,6 +14,9 @@ import auth
 import catalog
 import seller
 import commerce
+import orders
+import wallet
+import admin
 import seed as seed_module
 import storage
 
@@ -23,11 +26,14 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(catalog.router, prefix="/api")
 app.include_router(seller.router, prefix="/api")
 app.include_router(commerce.router, prefix="/api")
+app.include_router(orders.router, prefix="/api")
+app.include_router(wallet.router, prefix="/api")
+app.include_router(admin.router, prefix="/api")
 
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=False,
-    allow_origins=["*"],
+    allow_origins=os.environ.get("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(","),
     allow_methods=["*"],
     allow_headers=["*"],
 )

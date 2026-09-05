@@ -3,7 +3,8 @@ from pydantic import BaseModel
 from typing import List, Optional
 
 from db import db, new_id, now_iso
-from security import get_current_user
+from security import get_current_user, optional_user
+from order_models import CartItem
 
 router = APIRouter()
 
@@ -20,14 +21,8 @@ async def _hydrate_cart(cart: dict):
     for it in cart.get("items", []):
         p = await db.products.find_one({"id": it["product_id"]}, {"_id": 0})
         if p:
-            detailed.append({"product": p, "qty": it["qty"], "variant": it.get("variant")})
+            detailed.append({"product": p, "qty": it["qty"], "variant": it.get("variant"), "options": it.get("options", {}), "customization": it.get("customization", {})})
     return detailed
-
-
-class CartItem(BaseModel):
-    product_id: str
-    qty: int = 1
-    variant: Optional[str] = None
 
 
 class CartSync(BaseModel):
@@ -121,44 +116,60 @@ async def get_orders(user: dict = Depends(get_current_user)):
     return await db.orders.find({"customer_id": user["id"]}, {"_id": 0}).sort([("created_at", -1)]).to_list(200)
 
 
-class CheckoutBody(BaseModel):
-    items: List[CartItem]
-    address_id: Optional[str] = None
+# ---------- Customer shop follows / purchase history ----------
+@router.get("/shops/{shop_id}/follow")
+async def shop_follow_status(shop_id: str, user: Optional[dict] = Depends(optional_user)):
+    shop = await db.shops.find_one({"id": shop_id, "status": "published"}, {"_id": 0, "id": 1})
+    if not shop:
+        raise HTTPException(404, "Shop not found")
+    following = bool(user and await db.shop_follows.find_one({"customer_id": user["id"], "shop_id": shop_id}))
+    return {"shop_id": shop_id, "following": following}
 
 
-@router.post("/checkout")
-async def checkout(body: CheckoutBody, user: dict = Depends(get_current_user)):
-    # Checkout entry only: creates a pending order record grouped by shop (no payment).
-    by_shop = {}
-    created = []
-    skipped = []
-    for it in body.items:
-        p = await db.products.find_one({"id": it.product_id}, {"_id": 0})
-        if not p or p.get("stock", 0) <= 0:
-            if p:
-                skipped.append(p["title"])
-            continue
-        qty = min(it.qty, p.get("stock", 0))
-        price = p.get("discount_price") or p["price"]
-        by_shop.setdefault(p["shop_id"], {"shop_name": p["shop_name"], "items": [], "total": 0})
-        by_shop[p["shop_id"]]["items"].append({"product_id": p["id"], "title": p["title"], "qty": qty, "price": price})
-        by_shop[p["shop_id"]]["total"] += price * qty
-        await db.products.update_one({"id": p["id"]}, {"$inc": {"stock": -qty, "sold_count": qty}})
-    if not by_shop:
-        raise HTTPException(status_code=400, detail="No purchasable items in cart (out of stock)")
-    for shop_id, data in by_shop.items():
-        order = {
-            "id": new_id("ord_"),
-            "shop_id": shop_id,
-            "shop_name": data["shop_name"],
-            "customer_id": user["id"],
-            "customer_name": user["name"],
-            "customer_email": user["email"],
-            "items": data["items"],
-            "total": data["total"],
-            "status": "pending",
-            "created_at": now_iso(),
-        }
-        await db.orders.insert_one(dict(order))
-        created.append(order)
-    return {"orders": created, "skipped": skipped}
+@router.post("/shops/{shop_id}/follow")
+async def follow_shop(shop_id: str, user: dict = Depends(get_current_user)):
+    if user.get("role") not in ("customer", "admin"):
+        raise HTTPException(403, "Customer account required")
+    shop = await db.shops.find_one({"id": shop_id, "status": "published"}, {"_id": 0, "id": 1})
+    if not shop:
+        raise HTTPException(404, "Shop not found")
+    await db.shop_follows.update_one(
+        {"customer_id": user["id"], "shop_id": shop_id},
+        {"$setOnInsert": {"id": new_id("follow_"), "created_at": now_iso()}},
+        upsert=True,
+    )
+    return {"shop_id": shop_id, "following": True}
+
+
+@router.delete("/shops/{shop_id}/follow")
+async def unfollow_shop(shop_id: str, user: dict = Depends(get_current_user)):
+    await db.shop_follows.delete_one({"customer_id": user["id"], "shop_id": shop_id})
+    return {"shop_id": shop_id, "following": False}
+
+
+@router.get("/account/followed-shops")
+async def followed_shops(user: dict = Depends(get_current_user)):
+    follows = await db.shop_follows.find({"customer_id": user["id"]}, {"_id": 0}).sort([("created_at", -1)]).to_list(500)
+    ids = [item["shop_id"] for item in follows]
+    records = await db.shops.find({"id": {"$in": ids}, "status": "published"}, {"_id": 0}).to_list(500)
+    by_id = {shop["id"]: shop for shop in records}
+    result = [by_id[shop_id] for shop_id in ids if shop_id in by_id]
+    for shop in result:
+        shop["product_count"] = await db.products.count_documents({"shop_id": shop["id"], "status": "published"})
+    return result
+
+
+@router.get("/account/last-purchased")
+async def last_purchased(user: dict = Depends(get_current_user)):
+    orders = await db.orders.find({"customer_id": user["id"]}, {"_id": 0}).sort([("created_at", -1)]).to_list(500)
+    seen, items = set(), []
+    for order in orders:
+        for item in order.get("items", []):
+            product_id = item.get("product_id")
+            if not product_id or product_id in seen:
+                continue
+            seen.add(product_id)
+            product = await db.products.find_one({"id": product_id}, {"_id": 0, "images": 1, "status": 1})
+            images = (product or {}).get("images") or [None]
+            items.append({**item, "shop_id": order.get("shop_id"), "shop_name": order.get("shop_name"), "order_id": order["id"], "purchased_at": order.get("created_at"), "image": images[0], "available": (product or {}).get("status") == "published"})
+    return items[:100]

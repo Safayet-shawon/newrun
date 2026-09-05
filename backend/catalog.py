@@ -1,9 +1,10 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
+import re
 
 from db import db, NO_ID, new_id, now_iso
-from security import get_current_user
+from security import get_current_user, optional_user
 
 router = APIRouter()
 
@@ -39,13 +40,21 @@ async def list_products(
     shop: Optional[str] = None,
     brand: Optional[str] = None,
     featured: Optional[bool] = None,
+    following: bool = False,
     min_price: Optional[float] = None,
     max_price: Optional[float] = None,
     sort: str = "popular",
-    limit: int = 40,
-    skip: int = 0,
+    limit: int = Query(default=40, ge=1, le=100),
+    skip: int = Query(default=0, ge=0, le=10000),
+    user: Optional[dict] = Depends(optional_user),
 ):
-    q = {"status": "published"}
+    visible_shops = await db.shops.distinct("id", {"status": "published"})
+    q = {"status": "published", "shop_id": {"$in": visible_shops}}
+    if following:
+        if not user:
+            raise HTTPException(401, "Sign in to see products from shops you follow")
+        followed = await db.shop_follows.distinct("shop_id", {"customer_id": user["id"]})
+        q["shop_id"] = {"$in": [shop_id for shop_id in visible_shops if shop_id in set(followed)]}
     if category:
         q["category"] = category
     if shop:
@@ -55,6 +64,9 @@ async def list_products(
     if featured is not None:
         q["is_featured"] = featured
     if search:
+        search = re.escape(search.strip())
+        if search.lower() in ("men", "women"):
+            search = r"\b" + search + r"\b"
         q["$or"] = [
             {"title": {"$regex": search, "$options": "i"}},
             {"brand": {"$regex": search, "$options": "i"}},
@@ -68,17 +80,24 @@ async def list_products(
         price_q["$lte"] = max_price
     if price_q:
         q["price"] = price_q
+    if sort == "best_selling":
+        q["sold_count"] = {"$gt": 0}
     total = await db.products.count_documents(q)
-    items = await db.products.find(q, {"_id": 0}).sort(_sort_products(sort)).skip(skip).limit(limit).to_list(limit)
+    if sort in ("price_low", "price_high"):
+        items = await db.products.aggregate([{"$match": q}, {"$addFields": {"effective_price": {"$ifNull": ["$discount_price", "$price"]}}}, {"$sort": {"effective_price": 1 if sort == "price_low" else -1, "id": 1}}, {"$skip": skip}, {"$limit": limit}, {"$project": {"_id": 0, "effective_price": 0}}]).to_list(limit)
+    else:
+        items = await db.products.find(q, {"_id": 0}).sort(_sort_products(sort)).skip(skip).limit(limit).to_list(limit)
     return {"total": total, "items": items}
 
 
 @router.get("/products/{product_id}")
 async def get_product(product_id: str):
-    p = await db.products.find_one({"id": product_id}, {"_id": 0})
+    p = await db.products.find_one({"id": product_id, "status": "published"}, {"_id": 0})
     if not p:
         raise HTTPException(status_code=404, detail="Product not found")
-    shop = await db.shops.find_one({"id": p["shop_id"]}, {"_id": 0})
+    shop = await db.shops.find_one({"id": p["shop_id"], "status": "published"}, {"_id": 0})
+    if not shop:
+        raise HTTPException(status_code=404, detail="Shop unavailable")
     similar = await db.products.find(
         {"category": p["category"], "id": {"$ne": product_id}, "status": "published"}, {"_id": 0}
     ).limit(6).to_list(6)
@@ -103,6 +122,9 @@ async def list_shops(category: Optional[str] = None, featured: Optional[bool] = 
     if featured is not None:
         q["is_featured"] = featured
     if search:
+        search = re.escape(search.strip())
+        if search.lower() in ("men", "women"):
+            search = r"\b" + search + r"\b"
         q["$or"] = [
             {"name": {"$regex": search, "$options": "i"}},
             {"description": {"$regex": search, "$options": "i"}},
@@ -126,14 +148,18 @@ async def get_shop(slug: str):
 
 @router.get("/home")
 async def home_feed():
+    visible = await db.shops.distinct("id", {"status": "published"})
+    public_products = {"status": "published", "shop_id": {"$in": visible}}
     cats = await db.categories.find({}, {"_id": 0}).to_list(100)
     for c in cats:
         c["product_count"] = await db.products.count_documents({"category": c["slug"], "status": "published"})
-    trending = await db.products.find({"status": "published"}, {"_id": 0}).sort([("sold_count", -1)]).limit(10).to_list(10)
-    top_rated = await db.products.find({"status": "published"}, {"_id": 0}).sort([("rating", -1)]).limit(10).to_list(10)
-    new_arrivals = await db.products.find({"status": "published"}, {"_id": 0}).sort([("created_at", -1)]).limit(10).to_list(10)
-    deals = await db.products.find({"status": "published", "discount_price": {"$ne": None}}, {"_id": 0}).sort([("sold_count", -1)]).limit(10).to_list(10)
+    trending = await db.products.find(public_products, {"_id": 0}).sort([("sold_count", -1)]).limit(10).to_list(10)
+    top_rated = await db.products.find(public_products, {"_id": 0}).sort([("rating", -1)]).limit(10).to_list(10)
+    new_arrivals = await db.products.find(public_products, {"_id": 0}).sort([("created_at", -1)]).limit(10).to_list(10)
+    deals = await db.products.find({**public_products, "discount_price": {"$ne": None}}, {"_id": 0}).sort([("sold_count", -1)]).limit(10).to_list(10)
     featured_shops = await db.shops.find({"status": "published", "is_featured": True}, {"_id": 0}).sort([("rating", -1)]).limit(8).to_list(8)
+    if not featured_shops:
+        featured_shops = await db.shops.find({"status": "published"}, {"_id": 0}).sort([("created_at", -1)]).limit(8).to_list(8)
     for s in featured_shops:
         s["product_count"] = await db.products.count_documents({"shop_id": s["id"], "status": "published"})
     brands = await db.products.distinct("brand", {"status": "published"})
@@ -150,8 +176,8 @@ async def home_feed():
 
 class ReviewBody(BaseModel):
     product_id: str
-    rating: int
-    comment: str
+    rating: int = Field(ge=1, le=5, strict=True)
+    comment: str = Field(min_length=1, max_length=2000)
 
 
 @router.post("/reviews")
@@ -159,10 +185,13 @@ async def create_review(body: ReviewBody, user: dict = Depends(get_current_user)
     p = await db.products.find_one({"id": body.product_id}, {"_id": 0})
     if not p:
         raise HTTPException(status_code=404, detail="Product not found")
+    if not body.comment.strip():
+        raise HTTPException(422, "Write a review before submitting")
+    purchase = await db.orders.find_one({"customer_id": user["id"], "items.product_id": p["id"], "status": "delivered", "payment_mode": {"$ne": "sandbox"}})
     rating = max(1, min(5, body.rating))
     await db.reviews.update_one(
         {"product_id": body.product_id, "user_id": user["id"]},
-        {"$set": {"shop_id": p["shop_id"], "user_name": user["name"], "rating": rating, "comment": body.comment, "created_at": now_iso()},
+        {"$set": {"shop_id": p["shop_id"], "user_name": user["name"], "rating": rating, "comment": body.comment.strip(), "verified_purchase": bool(purchase), "created_at": now_iso()},
          "$setOnInsert": {"id": new_id("rev_")}},
         upsert=True,
     )

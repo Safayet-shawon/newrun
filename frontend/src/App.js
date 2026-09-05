@@ -28,7 +28,11 @@ import AccountOverview from "@/pages/account/AccountOverview";
 import AccountOrders from "@/pages/account/AccountOrders";
 import AccountAddresses from "@/pages/account/AccountAddresses";
 import AccountProfile from "@/pages/account/AccountProfile";
+import AccountWallet from "@/pages/account/AccountWallet";
 import AccountRecent from "@/pages/account/AccountRecent";
+import FollowedShops from "@/pages/account/FollowedShops";
+import LastPurchased from "@/pages/account/LastPurchased";
+import OrderSuccess from "@/pages/account/OrderSuccess";
 
 import Onboarding from "@/pages/seller/Onboarding";
 import SellerLayout from "@/pages/seller/SellerLayout";
@@ -45,6 +49,9 @@ import ReviewsPage from "@/pages/seller/ReviewsPage";
 import Analytics from "@/pages/seller/Analytics";
 import Settings from "@/pages/seller/Settings";
 import Notifications from "@/pages/seller/Notifications";
+import AdminLayout from "@/pages/admin/AdminLayout";
+import SellerDashboardThemes from "@/pages/admin/SellerDashboardThemes";
+import { AdminOverview, AdminOrders, AdminCustomers, AdminSellers, AdminCatalogue, AdminFinance, AdminSettings, AdminAudit } from "@/pages/admin/AdminSections";
 
 const M = (C) => (
   <MarketplaceLayout>
@@ -73,6 +80,7 @@ function AppRoutes() {
 
       {/* Auth */}
       <Route path="/login" element={<Login />} />
+      <Route path="/admin/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/seller/login" element={<SellerLogin />} />
@@ -83,6 +91,10 @@ function AppRoutes() {
       <Route path="/account" element={<RequireAuth role="customer"><AccountLayout /></RequireAuth>}>
         <Route index element={<AccountOverview />} />
         <Route path="orders" element={<AccountOrders />} />
+        <Route path="order-success" element={<OrderSuccess />} />
+        <Route path="followed-shops" element={<FollowedShops />} />
+        <Route path="last-purchased" element={<LastPurchased />} />
+        <Route path="wallet" element={<AccountWallet />} />
         <Route path="addresses" element={<AccountAddresses />} />
         <Route path="profile" element={<AccountProfile />} />
         <Route path="wishlist" element={<Wishlist embedded />} />
@@ -108,6 +120,19 @@ function AppRoutes() {
         <Route path="analytics" element={<Analytics />} />
         <Route path="settings" element={<Settings />} />
         <Route path="notifications" element={<Notifications />} />
+      </Route>
+
+      {/* Owner admin */}
+      <Route path="/admin/dashboard" element={<RequireAuth role="admin"><AdminLayout /></RequireAuth>}>
+        <Route index element={<AdminOverview />} />
+        <Route path="orders" element={<AdminOrders />} />
+        <Route path="customers" element={<AdminCustomers />} />
+        <Route path="sellers" element={<AdminSellers />} />
+        <Route path="catalogue" element={<AdminCatalogue />} />
+        <Route path="finance" element={<AdminFinance />} />
+        <Route path="settings" element={<AdminSettings />} />
+        <Route path="audit" element={<AdminAudit />} />
+        <Route path="themes" element={<SellerDashboardThemes />} />
       </Route>
 
       <Route path="*" element={M(Home)} />

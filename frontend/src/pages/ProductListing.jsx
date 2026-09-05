@@ -3,6 +3,7 @@ import { useParams, useSearchParams, useLocation, Link } from "react-router-dom"
 import { SlidersHorizontal, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { Loader, EmptyState, SectionHeader } from "@/components/shared/Bits";
+import BrowseMode from "@/components/marketplace/BrowseMode";
 import ProductCard from "@/components/marketplace/ProductCard";
 
 const SORTS = [
@@ -21,6 +22,7 @@ export default function ProductListing() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
+  const [error,setError] = useState(false);
 
   const isDeals = location.pathname === "/deals";
   const search = sp.get("q") || "";
@@ -31,7 +33,7 @@ export default function ProductListing() {
   useEffect(() => { api.get("/categories").then(({ data }) => setCats(data)).catch(() => {}); }, []);
 
   useEffect(() => {
-    setLoading(true);
+    setLoading(true); setError(false);
     const params = { sort, limit: 60 };
     if (activeCat) params.category = activeCat;
     if (search) params.search = search;
@@ -40,7 +42,7 @@ export default function ProductListing() {
       let items = data.items;
       if (isDeals) items = items.filter((p) => p.discount_price != null);
       setData({ ...data, items });
-    }).finally(() => setLoading(false));
+    }).catch(() => { setError(true); setData(null); }).finally(() => setLoading(false));
   }, [activeCat, search, brand, sort, isDeals]);
 
   const title = isDeals ? "Deals & Discounts" : search ? `Results for “${search}”` : brand ? brand : activeCat ? cats.find((c) => c.slug === activeCat)?.name || "Products" : "All Products";
@@ -52,6 +54,8 @@ export default function ProductListing() {
       <SectionHeader eyebrow={isDeals ? "Save more" : "Marketplace"} title={title}
         action={<button onClick={() => setShowFilters((s) => !s)} className="nx-btn-ghost lg:hidden" data-testid="toggle-filters"><SlidersHorizontal size={15} /> Filters</button>} />
 
+      <BrowseMode category={activeCat} selected="products" />
+      {error && <p role="alert" className="mb-5 rounded-lg border p-4">The catalogue is unavailable. Please try again shortly.</p>}
       <div className="flex gap-8">
         {/* Sidebar filters */}
         <aside className={`${showFilters ? "fixed inset-0 z-50 bg-nexora-ink/40 lg:static lg:bg-transparent" : "hidden"} lg:block lg:w-60 lg:shrink-0`}>

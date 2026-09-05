@@ -8,6 +8,7 @@ import { useStore } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
 import ProductCard from "@/components/marketplace/ProductCard";
 import { toast } from "sonner";
+import FollowShopButton from "@/components/marketplace/FollowShopButton";
 
 export default function ProductDetail() {
   const { id } = useParams();
@@ -18,23 +19,26 @@ export default function ProductDetail() {
   const [activeImg, setActiveImg] = useState(0);
   const [qty, setQty] = useState(1);
   const [variant, setVariant] = useState({});
+  const [customization,setCustomization] = useState({});
   const [tab, setTab] = useState("desc");
   const [reviewForm, setReviewForm] = useState({ rating: 5, comment: "" });
 
   useEffect(() => {
     window.scrollTo(0, 0);
     api.get(`/products/${id}`).then(({ data }) => {
-      setData(data); setActiveImg(0); setQty(1);
+      setData(data); setActiveImg(0); setQty(1); setVariant({}); setCustomization({});
       addRecent(data.product);
     }).catch(() => setData({ notfound: true }));
-  }, [id]);
+  }, [id, addRecent]);
 
   if (!data) return <Loader label="Loading product" />;
   if (data.notfound) return <div className="nx-container py-20 text-center"><p className="text-nexora-muted">Product not found.</p></div>;
 
   const { product: p, shop, similar, frequently_bought, reviews } = data;
   const disc = discountPercent(p);
-  const stock = stockState(p);
+  const selectedInventory = p.variant_inventory?.find(v => JSON.stringify(Object.entries(v.options).sort()) === JSON.stringify(Object.entries(variant).sort()));
+  const selectedProduct = selectedInventory ? {...p, stock:Math.min(p.stock,selectedInventory.stock), price:selectedInventory.price ?? effectivePrice(p),discount_price:null} : p;
+  const stock = stockState(selectedProduct);
 
   const submitReview = async () => {
     if (!user) { toast.error("Please sign in to write a review"); navigate("/login"); return; }
@@ -76,12 +80,12 @@ export default function ProductDetail() {
           </div>
           <h1 className="mt-3 text-2xl font-extrabold tracking-tight text-nexora-ink sm:text-3xl">{p.title}</h1>
           <div className="mt-2 flex items-center gap-3">
-            <RatingStars value={p.rating} count={p.review_count} />
+            <a href="#customer-reviews" aria-label="Read customer reviews"><RatingStars value={p.rating} count={p.review_count} /></a>
             <span className="text-sm text-nexora-muted">· {p.sold_count} sold</span>
           </div>
 
           <div className="mt-4 flex items-end gap-3">
-            <span className="text-3xl font-extrabold text-nexora-ink">{formatBDT(effectivePrice(p))}</span>
+            <span className="text-3xl font-extrabold text-nexora-ink">{formatBDT(effectivePrice(selectedProduct))}</span>
             {p.discount_price != null && <span className="pb-1 text-lg text-nexora-muted line-through">{formatBDT(p.price)}</span>}
           </div>
           <p className={`mt-1 text-sm font-semibold ${stock.tone === "out" ? "text-nexora-coral" : stock.tone === "low" ? "text-nexora-amber" : "text-nexora-emerald"}`}>{stock.label}</p>
@@ -99,14 +103,15 @@ export default function ProductDetail() {
             </div>
           ))}
 
+          {p.product_type === "cake" && <div className="mt-5 space-y-3 rounded-xl border border-nexora-border p-4"><h3 className="font-bold">Personalize your cake</h3><p className="text-sm text-nexora-muted">Allow at least {p.fulfillment?.lead_time_days ?? 1} day(s) for preparation. Availability is verified when you review the order.</p><label className="block text-sm">Delivery date<input aria-label="Cake delivery date" type="date" value={customization.delivery_date || ""} onChange={e=>setCustomization(s=>({...s,delivery_date:e.target.value}))} className="mt-1 block rounded-lg border p-2"/></label>{p.fulfillment?.allow_message !== false && <label className="block text-sm">Message on cake<input aria-label="Cake message" maxLength={p.fulfillment?.max_message_length || 80} value={customization.message || ""} onChange={e=>setCustomization(s=>({...s,message:e.target.value}))} className="mt-1 block w-full rounded-lg border p-2"/></label>}{p.fulfillment?.allergens && <p className="text-sm">Allergen information: {p.fulfillment.allergens}</p>}</div>}
           {/* Qty + actions */}
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <div className="flex items-center rounded-full border border-nexora-border">
               <button onClick={() => setQty((q) => Math.max(1, q - 1))} className="grid h-11 w-11 place-items-center text-nexora-ink" data-testid="qty-minus"><Minus size={16} /></button>
               <span className="w-8 text-center font-semibold" data-testid="qty-value">{qty}</span>
-              <button onClick={() => setQty((q) => q + 1)} className="grid h-11 w-11 place-items-center text-nexora-ink" data-testid="qty-plus"><Plus size={16} /></button>
+              <button onClick={() => setQty((q) => Math.min(selectedProduct.stock, q + 1))} className="grid h-11 w-11 place-items-center text-nexora-ink" data-testid="qty-plus"><Plus size={16} /></button>
             </div>
-            <button disabled={stock.tone === "out"} onClick={() => { addToCart(p, qty, Object.values(variant).join("/")); }} className="nx-btn-primary flex-1 min-w-[160px]" data-testid="pdp-add-to-cart">
+            <button disabled={stock.tone === "out"} onClick={() => { addToCart(selectedProduct, qty, null, variant, customization); }} className="nx-btn-primary flex-1 min-w-[160px]" data-testid="pdp-add-to-cart">
               <ShoppingBag size={18} /> Add to cart
             </button>
             <button onClick={() => toggleWishlist(p)} className="grid h-11 w-11 place-items-center rounded-full border border-nexora-border hover:border-nexora-coral" data-testid="pdp-wishlist">
@@ -116,7 +121,7 @@ export default function ProductDetail() {
 
           {/* delivery info */}
           <div className="mt-6 grid grid-cols-3 gap-3">
-            {[[Truck, "Nationwide delivery"], [ShieldCheck, "Verified seller"], [RotateCcw, "7-day returns"]].map(([Ic, t]) => (
+            {[[Truck, "See delivery details"], [ShieldCheck, "Seller information"], [RotateCcw, "See shop return policy"]].map(([Ic, t]) => (
               <div key={t} className="flex flex-col items-center gap-1.5 rounded-2xl border border-nexora-border bg-white p-3 text-center">
                 <Ic size={18} className="text-nexora-emerald" /><span className="text-[11px] font-medium text-nexora-muted">{t}</span>
               </div>
@@ -128,16 +133,43 @@ export default function ProductDetail() {
             <div className="mt-6 flex items-center gap-4 rounded-2xl border border-nexora-border bg-white p-4">
               <div className="grid h-12 w-12 place-items-center rounded-xl bg-nexora-emerald text-lg font-extrabold text-white">{shop.name[0]}</div>
               <div className="flex-1"><p className="font-bold text-nexora-ink">{shop.name}</p><RatingStars value={shop.rating} /></div>
-              <Link to={`/shop/${shop.slug}`} className="nx-btn-ghost" data-testid="pdp-visit-store"><Store size={15} /> Visit store</Link>
+              <div className="flex flex-wrap gap-2"><FollowShopButton shopId={shop.id}/><Link to={`/shop/${shop.slug}`} className="nx-btn-ghost" data-testid="pdp-visit-store"><Store size={15} /> Visit store</Link></div>
             </div>
           )}
         </div>
       </div>
 
+          <section id="customer-reviews" aria-labelledby="reviews-heading" className="mt-8 scroll-mt-24">
+            <h2 id="reviews-heading" className="mb-4 text-2xl font-bold">Customer reviews ({p.review_count || 0})</h2>
+            <RatingStars value={p.rating} count={p.review_count} />
+            <div className="grid gap-8 lg:grid-cols-3">
+              <div className="lg:col-span-2 space-y-4">
+                {(reviews || []).length === 0 && <p className="text-nexora-muted">No reviews yet. Be the first!</p>}
+                {(reviews || []).map((r) => (
+                  <div key={r.id} className="rounded-2xl border border-nexora-border bg-white p-4">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-nexora-ink">{r.user_name}</span>
+                      <span className="inline-flex">{Array.from({ length: 5 }).map((_, i) => <Star key={i} size={14} className={i < r.rating ? "fill-nexora-amber text-nexora-amber" : "text-nexora-border"} />)}</span>
+                    </div>
+                    <p className="mt-2 text-sm text-nexora-muted">{r.comment}</p>{r.verified_purchase && <p className="mt-2 text-xs text-nexora-emerald">Verified purchase</p>}
+                  </div>
+                ))}
+              </div>
+              <div className="rounded-2xl border border-nexora-border bg-white p-4 h-fit">
+                <h4 className="font-bold text-nexora-ink">Write a review</h4>
+                <div className="mt-3 flex gap-1">
+                  {[1,2,3,4,5].map((n) => <button key={n} aria-label={`${n} star rating`} aria-pressed={reviewForm.rating === n} onClick={() => setReviewForm((f) => ({ ...f, rating: n }))} data-testid={`review-star-${n}`}><Star size={22} className={n <= reviewForm.rating ? "fill-nexora-amber text-nexora-amber" : "text-nexora-border"} /></button>)}
+                </div>
+                <textarea aria-label="Your review" maxLength={2000} value={reviewForm.comment} onChange={(e) => setReviewForm((f) => ({ ...f, comment: e.target.value }))} placeholder="Share your experience…" rows={3} className="mt-3 w-full rounded-xl border border-nexora-border p-3 text-sm outline-none focus:border-nexora-emerald" data-testid="review-comment" />
+                <button onClick={submitReview} className="nx-btn-primary mt-3 w-full" data-testid="submit-review">Post review</button>
+              </div>
+            </div>
+          </section>
+
       {/* Tabs */}
       <div className="mt-12">
         <div className="flex gap-6 border-b border-nexora-border">
-          {[["desc", "Description"], ["specs", "Specifications"], ["reviews", `Reviews (${p.review_count})`]].map(([k, l]) => (
+          {[["desc", "Description"], ["specs", "Specifications"]].map(([k, l]) => (
             <button key={k} onClick={() => setTab(k)} className={`-mb-px border-b-2 pb-3 text-sm font-semibold ${tab === k ? "border-nexora-emerald text-nexora-ink" : "border-transparent text-nexora-muted"}`} data-testid={`tab-${k}`}>{l}</button>
           ))}
         </div>
@@ -150,30 +182,7 @@ export default function ProductDetail() {
               ))}
             </div>
           )}
-          {tab === "reviews" && (
-            <div className="grid gap-8 lg:grid-cols-3">
-              <div className="lg:col-span-2 space-y-4">
-                {(reviews || []).length === 0 && <p className="text-nexora-muted">No reviews yet. Be the first!</p>}
-                {(reviews || []).map((r) => (
-                  <div key={r.id} className="rounded-2xl border border-nexora-border bg-white p-4">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-nexora-ink">{r.user_name}</span>
-                      <span className="inline-flex">{Array.from({ length: 5 }).map((_, i) => <Star key={i} size={14} className={i < r.rating ? "fill-nexora-amber text-nexora-amber" : "text-nexora-border"} />)}</span>
-                    </div>
-                    <p className="mt-2 text-sm text-nexora-muted">{r.comment}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="rounded-2xl border border-nexora-border bg-white p-4 h-fit">
-                <h4 className="font-bold text-nexora-ink">Write a review</h4>
-                <div className="mt-3 flex gap-1">
-                  {[1,2,3,4,5].map((n) => <button key={n} onClick={() => setReviewForm((f) => ({ ...f, rating: n }))} data-testid={`review-star-${n}`}><Star size={22} className={n <= reviewForm.rating ? "fill-nexora-amber text-nexora-amber" : "text-nexora-border"} /></button>)}
-                </div>
-                <textarea value={reviewForm.comment} onChange={(e) => setReviewForm((f) => ({ ...f, comment: e.target.value }))} placeholder="Share your experience…" rows={3} className="mt-3 w-full rounded-xl border border-nexora-border p-3 text-sm outline-none focus:border-nexora-emerald" data-testid="review-comment" />
-                <button onClick={submitReview} className="nx-btn-primary mt-3 w-full" data-testid="submit-review">Post review</button>
-              </div>
-            </div>
-          )}
+
         </div>
       </div>
 

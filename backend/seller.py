@@ -1,12 +1,16 @@
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Response, Query, Header
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List
 import uuid
+import os
+import re
+from product_rules import validate_product
 
 from db import db, NO_ID, new_id, now_iso
 from security import get_current_user, require_role
 from entitlements import get_plan, get_entitlements, PLANS, PLAN_ORDER, PLAN_FEATURES
 from storage import put_object, get_object, APP_NAME, MIME_TYPES
+from admin import get_dashboard_theme
 
 router = APIRouter()
 
@@ -17,7 +21,7 @@ async def _seller_context(user: dict):
     profile = await db.seller_profiles.find_one({"user_id": user["id"]}, {"_id": 0})
     shop = await db.shops.find_one({"seller_id": user["id"]}, {"_id": 0})
     sub = await db.subscriptions.find_one({"seller_id": user["id"]}, {"_id": 0})
-    plan_id = sub["plan"] if sub else "start"
+    plan_id = sub["plan"] if sub and sub.get("status") in ("active", "active_dev") else "start"
     return profile, shop, sub, plan_id
 
 
@@ -32,6 +36,7 @@ async def seller_me(user: dict = Depends(seller_dep)):
         "subscription": sub,
         "plan": get_plan(plan_id),
         "entitlements": get_entitlements(plan_id),
+        "dashboard_theme": await get_dashboard_theme(plan_id),
     }
 
 
@@ -103,7 +108,7 @@ async def seller_onboarding(body: OnboardingBody, user: dict = Depends(seller_de
 
     await db.subscriptions.update_one(
         {"seller_id": user["id"]},
-        {"$set": {"plan": plan_id, "status": "active_dev", "updated_at": now_iso()},
+        {"$set": {"plan": plan_id, "status": "active_dev" if os.getenv("ALLOW_DEV_SUBSCRIPTIONS", "false").lower() == "true" else "pending", "updated_at": now_iso()},
          "$setOnInsert": {"id": new_id("sub_"), "seller_id": user["id"], "started_at": now_iso()}},
         upsert=True,
     )
@@ -140,9 +145,24 @@ async def update_shop(body: ShopUpdate, user: dict = Depends(seller_dep)):
     ent = get_entitlements(plan_id)
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
 
+    for key in ("accent_color", "secondary_color"):
+        if updates.get(key) and not re.fullmatch(r"#[0-9a-fA-F]{6}", updates[key]):
+            raise HTTPException(422, "Use a six-digit hex color")
+    for url in (updates.get("social_links") or {}).values():
+        if url and not str(url).startswith(("https://", "http://")):
+            raise HTTPException(422, "Social links must use HTTP or HTTPS")
+    if "typography_preset" in updates and updates["typography_preset"] not in ("default", "serif", "sans"):
+        raise HTTPException(422, "Choose a supported font")
+    if "theme_preset" in updates:
+        supported = ["fashion_editorial", "cake_bakery_food", "electronics_technical", "beauty_elegant", "furniture_home", "grocery_fresh", "jewellery_luxury", "sports_energetic", "books_editorial"]
+        if updates["theme_preset"] not in supported:
+            raise HTTPException(422, "Choose a supported theme")
     # Central entitlement gating
     if not ent["theme_switching"]:
         updates.pop("theme_preset", None)
+    if not ent.get("layout_customization"):
+        updates.pop("typography_preset", None)
+        updates.pop("sections", None)
     if not ent["custom_accent_color"]:
         updates.pop("accent_color", None)
         updates.pop("secondary_color", None)
@@ -173,18 +193,35 @@ async def unpublish_shop(user: dict = Depends(seller_dep)):
 
 
 # ---------- Products ----------
+class VariantStock(BaseModel):
+    options: dict[str, str]
+    stock: int = Field(default=0, ge=0, strict=True)
+    price: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    sku: str = ""
+
+class Fulfillment(BaseModel):
+    lead_time_days: int = Field(default=1, ge=0, le=365)
+    available_dates: List[str] = []
+    unavailable_dates: List[str] = []
+    allow_message: bool = True
+    max_message_length: int = Field(default=80, ge=0, le=300)
+    allergens: str = ""
+
 class ProductBody(BaseModel):
+    product_type: str = "general"
+    variant_inventory: List[VariantStock] = Field(default_factory=list, max_length=200)
+    fulfillment: Fulfillment = Field(default_factory=Fulfillment)
     title: str
     description: Optional[str] = ""
     category: Optional[str] = None
     brand: Optional[str] = ""
     sku: Optional[str] = ""
-    price: float
-    discount_price: Optional[float] = None
+    price: float = Field(ge=0, allow_inf_nan=False)
+    discount_price: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     images: List[str] = []
     variants: list = []
     attributes: list = []
-    stock: int = 0
+    stock: int = Field(default=0, ge=0, strict=True)
     status: str = "draft"
     tags: List[str] = []
     specs: dict = {}
@@ -215,7 +252,7 @@ async def create_product(body: ProductBody, user: dict = Depends(seller_dep)):
     count = await db.products.count_documents({"shop_id": shop["id"]})
     if ent["max_products"] != -1 and count >= ent["max_products"]:
         raise HTTPException(status_code=403, detail=f"Your {plan_id.upper()} plan allows up to {ent['max_products']} products. Upgrade to add more.")
-    p = body.model_dump()
+    p = validate_product(body.model_dump())
     p.update({
         "id": new_id("prod_"),
         "shop_id": shop["id"],
@@ -238,6 +275,7 @@ async def update_product(product_id: str, body: ProductBody, user: dict = Depend
     if not p:
         raise HTTPException(status_code=404, detail="Product not found")
     updates = body.model_dump(exclude_unset=True)
+    validate_product({**p, **updates})
     if body.category:
         updates["category"] = body.category
     await db.products.update_one({"id": product_id}, {"$set": updates})
@@ -345,7 +383,7 @@ async def change_subscription(body: PlanChange, user: dict = Depends(seller_dep)
         raise HTTPException(status_code=400, detail="Invalid plan")
     await db.subscriptions.update_one(
         {"seller_id": user["id"]},
-        {"$set": {"plan": body.plan, "status": "active_dev", "updated_at": now_iso()},
+        {"$set": {"plan": body.plan, "status": "active_dev" if os.getenv("ALLOW_DEV_SUBSCRIPTIONS", "false").lower() == "true" else "pending", "updated_at": now_iso()},
          "$setOnInsert": {"id": new_id("sub_"), "seller_id": user["id"], "started_at": now_iso()}},
         upsert=True,
     )
@@ -359,7 +397,9 @@ async def upload_file(file: UploadFile = File(...), user: dict = Depends(get_cur
     if ext not in MIME_TYPES:
         raise HTTPException(status_code=400, detail="Only image files are allowed")
     path = f"{APP_NAME}/uploads/{user['id']}/{uuid.uuid4().hex}.{ext}"
-    data = await file.read()
+    data = await file.read(8 * 1024 * 1024 + 1)
+    if len(data) > 8 * 1024 * 1024:
+        raise HTTPException(413, "Images must be at most 8 MB")
     result = put_object(path, data, MIME_TYPES.get(ext, "application/octet-stream"))
     await db.files.insert_one({
         "id": new_id("file_"),

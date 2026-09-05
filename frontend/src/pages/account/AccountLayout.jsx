@@ -1,11 +1,14 @@
 import React from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { LayoutGrid, Package, MapPin, User, Heart, Clock, LogOut } from "lucide-react";
+import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { LayoutGrid, Package, MapPin, User, Heart, Clock, LogOut, Wallet, Store } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
 const LINKS = [
+  { to: "/account/wallet", icon: Wallet, label: "Nexora Wallet" },
   { to: "/account", icon: LayoutGrid, label: "Overview", end: true },
   { to: "/account/orders", icon: Package, label: "Orders" },
+  { to: "/account/followed-shops", icon: Store, label: "Shops You Follow" },
+  { to: "/account/last-purchased", icon: Package, label: "Last Purchased" },
   { to: "/account/wishlist", icon: Heart, label: "Wishlist" },
   { to: "/account/recently-viewed", icon: Clock, label: "Recently viewed" },
   { to: "/account/addresses", icon: MapPin, label: "Addresses" },
@@ -17,6 +20,7 @@ export default function AccountLayout() {
   const navigate = useNavigate();
   return (
     <div className="nx-container py-8 animate-fade-in">
+      <Link to="/" className="mb-5 inline-block text-sm text-nexora-emerald">← Back to marketplace</Link>
       <div className="mb-6 flex items-center gap-4">
         <div className="grid h-14 w-14 place-items-center rounded-2xl bg-nexora-emerald text-xl font-extrabold text-white">{user?.name?.[0]?.toUpperCase()}</div>
         <div>
@@ -25,7 +29,7 @@ export default function AccountLayout() {
         </div>
       </div>
       <div className="grid gap-8 lg:grid-cols-4">
-        <aside className="lg:col-span-1">
+        <aside className="min-w-0 lg:col-span-1">
           <div className="flex gap-2 overflow-x-auto rounded-2xl border border-nexora-border bg-white p-2 no-scrollbar lg:flex-col">
             {LINKS.map((l) => (
               <NavLink key={l.to} to={l.to} end={l.end} data-testid={`account-nav-${l.label.toLowerCase().replace(/ /g, "-")}`}
@@ -36,7 +40,7 @@ export default function AccountLayout() {
             <button onClick={() => { logout(); navigate("/"); }} className="flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium text-nexora-coral hover:bg-[#FFEDE5]" data-testid="account-logout"><LogOut size={18} /> Log out</button>
           </div>
         </aside>
-        <div className="lg:col-span-3"><Outlet /></div>
+        <div className="min-w-0 lg:col-span-3"><Outlet /></div>
       </div>
     </div>
   );

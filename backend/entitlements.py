@@ -1,3 +1,4 @@
+import os
 """Central feature-entitlement configuration. Single source of truth for plan gating."""
 
 PLAN_ORDER = ["start", "grow", "pro"]
@@ -25,7 +26,7 @@ PLANS = {
             "staff_accounts": False,
             "ai_features": False,
             "priority_support": False,
-            "transaction_fee": 5.0,
+            "transaction_fee": None,
         },
     },
     "grow": {
@@ -50,7 +51,7 @@ PLANS = {
             "staff_accounts": True,
             "ai_features": False,
             "priority_support": False,
-            "transaction_fee": 2.5,
+            "transaction_fee": None,
         },
     },
     "pro": {
@@ -64,7 +65,7 @@ PLANS = {
             "theme_switching": True,
             "theme_access": "premium",
             "custom_accent_color": True,
-            "custom_css": True,
+            "custom_css": False,
             "collections_limit": -1,
             "sections_limit": -1,
             "advanced_analytics": True,
@@ -75,42 +76,25 @@ PLANS = {
             "staff_accounts": True,
             "ai_features": True,
             "priority_support": True,
-            "transaction_fee": 1.0,
+            "transaction_fee": None,
         },
     },
 }
 
+# Draft pricing; billing interval and commissions must be explicitly configured.
+PLANS["grow"]["entitlements"]["theme_switching"] = False
+for plan_id, plan in PLANS.items():
+    plan["price_bdt"] = int(os.getenv(f"PLAN_{plan_id.upper()}_BDT", str(plan["price_bdt"])))
+    plan["billing_period"] = os.getenv("BILLING_PERIOD") or None
+    plan["billing_enabled"] = False
+    plan["entitlements"]["logo_upload"] = True
+    plan["entitlements"]["cover_upload"] = True
+    plan["entitlements"]["layout_customization"] = plan_id == "pro"
 PLAN_FEATURES = {
-    "start": [
-        "Digital storefront on NEXORA",
-        "Up to 50 products",
-        "Basic store customization",
-        "Inventory & order management",
-        "Basic analytics",
-        "Basic coupons",
-        "SEO placeholder tools",
-    ],
-    "grow": [
-        "Everything in START",
-        "Up to 500 products",
-        "Advanced store customization",
-        "All 9 storefront theme presets",
-        "Advanced analytics & customer insights",
-        "Bulk catalog management",
-        "Marketing & abandoned-cart tools",
-        "Staff accounts",
-    ],
-    "pro": [
-        "Everything in GROW",
-        "Unlimited products",
-        "Premium themes & custom styling",
-        "Custom accent colors & CSS",
-        "AI feature entitlements",
-        "Advanced automation",
-        "Priority Bangladesh support",
-    ],
+    "start": ["Category-specific preset", "Logo and cover uploads", "Up to 50 products", "Inventory and orders"],
+    "grow": ["Logo and cover uploads", "Up to 500 products", "Limited brand color customization", "Bulk catalogue management", "Customer insights"],
+    "pro": ["Logo and cover uploads", "Unlimited products", "Theme selection", "Supported layout, font and color controls", "Advanced analytics"]
 }
-
 
 def get_plan(plan_id: str) -> dict:
     return PLANS.get(plan_id, PLANS["start"])

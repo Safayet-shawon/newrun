@@ -159,8 +159,10 @@ async def _ensure_users():
 
 
 async def seed():
-    await db.categories.delete_many({})
-    await db.categories.insert_many([dict(c) for c in CATEGORIES])
+    for category in CATEGORIES:
+        await db.categories.update_one({"slug": category["slug"]}, {"$setOnInsert": dict(category)}, upsert=True)
+    if os.environ.get("SEED_DEMO_DATA", "false").lower() != "true":
+        return
     await _ensure_users()
 
     if await db.shops.count_documents({}) > 0:
@@ -283,3 +285,15 @@ async def ensure_indexes():
     await db.shops.create_index("seller_id")
     await db.products.create_index("shop_id")
     await db.products.create_index("category")
+
+    await db.checkouts.create_index([("customer_id", 1), ("key", 1)], unique=True)
+    await db.orders.create_index("id", unique=True)
+    await db.wallets.create_index([("user_id", 1), ("mode", 1)], unique=True)
+    await db.wallet_deposits.create_index("id", unique=True)
+    await db.wallet_deposits.create_index([("user_id", 1), ("mode", 1), ("key", 1)], unique=True)
+    await db.wallet_ledger.create_index("reference", unique=True)
+    await db.wallet_ledger.create_index("validation_id", unique=True, sparse=True)
+    await db.audit_events.create_index([("created_at", -1)])
+    await db.shop_follows.create_index([("customer_id", 1), ("shop_id", 1)], unique=True)
+    await db.shop_follows.create_index([("customer_id", 1), ("created_at", -1)])
+    await db.seller_dashboard_themes.create_index("plan_id", unique=True)

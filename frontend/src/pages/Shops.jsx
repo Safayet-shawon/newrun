@@ -3,6 +3,7 @@ import { useSearchParams, Link } from "react-router-dom";
 import { Search } from "lucide-react";
 import { api } from "@/lib/api";
 import { Loader, EmptyState, SectionHeader } from "@/components/shared/Bits";
+import BrowseMode from "@/components/marketplace/BrowseMode";
 import ShopCard from "@/components/marketplace/ShopCard";
 
 export default function Shops() {
@@ -12,18 +13,19 @@ export default function Shops() {
   const cat = sp.get("category") || "";
   const [q, setQ] = useState("");
 
-  useEffect(() => { api.get("/categories").then(({ data }) => setCats(data)); }, []);
+  useEffect(() => { api.get("/categories").then(({ data }) => setCats(data)).catch(() => {}); }, []);
   useEffect(() => {
     const params = { limit: 60 };
     if (cat) params.category = cat;
     if (q) params.search = q;
-    const t = setTimeout(() => api.get("/shops", { params }).then(({ data }) => setShops(data)), 200);
+    const t = setTimeout(() => api.get("/shops", { params }).then(({ data }) => setShops(data)).catch(() => setShops([])), 200);
     return () => clearTimeout(t);
   }, [cat, q]);
 
   return (
     <div className="nx-container py-8 animate-fade-in">
       <SectionHeader eyebrow="Discover" title="Browse shops" />
+      <BrowseMode category={cat} selected="shops" />
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative flex-1">
           <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-nexora-muted" />

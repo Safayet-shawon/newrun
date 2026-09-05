@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-    --nexora-emerald: #10B981;
+    --nexora-emerald: #6a4fd6;
     --radius: 0.85rem;
 }
 
@@ -15,42 +15,42 @@
 body {
     margin: 0;
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-    background-color: #FFFBF5;
-    color: #17211B;
+    background-color: #fbfbfa;
+    color: #1e1b2e;
 }
 
 ::selection {
-    background: #10B981;
+    background: #6a4fd6;
     color: #fff;
 }
 
 /* Slim premium scrollbar */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-track { background: #ECFDF5; }
-::-webkit-scrollbar-thumb { background: #b9e6d6; border-radius: 999px; border: 2px solid #ECFDF5; }
-::-webkit-scrollbar-thumb:hover { background: #10B981; }
+::-webkit-scrollbar-track { background: #f2eff7; }
+::-webkit-scrollbar-thumb { background: #d9cff2; border-radius: 999px; border: 2px solid #f2eff7; }
+::-webkit-scrollbar-thumb:hover { background: #6a4fd6; }
 
 @layer base {
     :root {
         --background: 40 100% 98%;
-        --foreground: 150 20% 11%;
+        --foreground: 249 26% 14%;
         --card: 0 0% 100%;
-        --card-foreground: 150 20% 11%;
+        --card-foreground: 249 26% 14%;
         --popover: 0 0% 100%;
-        --popover-foreground: 150 20% 11%;
-        --primary: 160 84% 39%;
+        --popover-foreground: 249 26% 14%;
+        --primary: 252 62% 57%;
         --primary-foreground: 0 0% 100%;
-        --secondary: 152 76% 96%;
-        --secondary-foreground: 150 20% 11%;
-        --muted: 152 30% 96%;
-        --muted-foreground: 150 8% 43%;
-        --accent: 172 66% 50%;
-        --accent-foreground: 150 20% 11%;
+        --secondary: 262 33% 96%;
+        --secondary-foreground: 249 26% 14%;
+        --muted: 262 33% 96%;
+        --muted-foreground: 249 8% 45%;
+        --accent: 259 76% 76%;
+        --accent-foreground: 249 26% 14%;
         --destructive: 0 84% 60%;
         --destructive-foreground: 0 0% 100%;
-        --border: 140 22% 92%;
-        --input: 140 22% 92%;
-        --ring: 160 84% 39%;
+        --border: 251 24% 91%;
+        --input: 251 24% 91%;
+        --ring: 252 62% 57%;
         --radius: 0.85rem;
     }
 }
@@ -79,3 +79,8 @@ body {
 @layer base {
     [data-debug-wrapper="true"] { display: contents !important; }
 }
+
+h1,h2,h3{font-family:"Playfair Display",Georgia,serif} .nx-btn-primary,.nx-btn-ghost{border-radius:5px} .nx-card{border-radius:8px} .nx-container{max-width:1240px} .App :focus-visible{outline:2px solid #6a4fd6;outline-offset:3px}
+.nx-container{max-width:none;width:100%}
+/* Admin-controlled seller dashboard shape. */
+[data-seller-dashboard] .rounded-2xl,[data-seller-dashboard] .rounded-xl{border-radius:var(--seller-radius,12px)}

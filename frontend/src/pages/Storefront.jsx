@@ -5,6 +5,7 @@ import { api, resolveImage } from "@/lib/api";
 import { Loader, EmptyState, RatingStars, Badge } from "@/components/shared/Bits";
 import ProductCard from "@/components/marketplace/ProductCard";
 import { getTheme } from "@/lib/themePresets";
+import FollowShopButton from "@/components/marketplace/FollowShopButton";
 
 export default function Storefront({ preview }) {
   const { slug } = useParams();
@@ -63,7 +64,7 @@ export default function Storefront({ preview }) {
               </div>
               <p className="mt-1 line-clamp-1 text-sm text-nexora-muted">{shop.description}</p>
             </div>
-            <Link to="/shops" className="nx-btn-ghost hidden sm:inline-flex"><ArrowLeft size={15} /> All shops</Link>
+            <div className="flex gap-2"><FollowShopButton shopId={shop.id}/><Link to="/shops" className="nx-btn-ghost hidden sm:inline-flex"><ArrowLeft size={15} /> All shops</Link></div>
           </div>
         </div>
       </div>

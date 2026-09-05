@@ -1,5 +1,15 @@
 import os
 import requests
+from pathlib import Path
+
+LOCAL_ROOT = Path(__file__).resolve().parent.parent / ".local" / "uploads"
+LOCAL_STORAGE = os.environ.get("STORAGE_BACKEND", "local") == "local"
+
+def local_path(path):
+    resolved = (LOCAL_ROOT / path).resolve()
+    if not resolved.is_relative_to(LOCAL_ROOT.resolve()):
+        raise ValueError("Invalid storage path")
+    return resolved
 
 STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
 STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
@@ -11,6 +21,9 @@ _storage_key = None
 
 def init_storage(force: bool = False):
     global _storage_key
+    if LOCAL_STORAGE:
+        LOCAL_ROOT.mkdir(parents=True, exist_ok=True)
+        return "local"
     if _storage_key and not force:
         return _storage_key
     resp = requests.post(f"{STORAGE_URL}/init", json={"emergent_key": EMERGENT_KEY}, timeout=30)
@@ -20,6 +33,11 @@ def init_storage(force: bool = False):
 
 
 def put_object(path: str, data: bytes, content_type: str) -> dict:
+    if LOCAL_STORAGE:
+        destination = local_path(path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(data)
+        return {"path": path}
     key = init_storage()
     resp = requests.put(
         f"{STORAGE_URL}/objects/{path}",
@@ -40,6 +58,9 @@ def put_object(path: str, data: bytes, content_type: str) -> dict:
 
 
 def get_object(path: str):
+    if LOCAL_STORAGE:
+        source = local_path(path)
+        return source.read_bytes(), MIME_TYPES.get(source.suffix.lstrip("."), "application/octet-stream")
     key = init_storage()
     resp = requests.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key}, timeout=60)
     if resp.status_code == 404:

@@ -19,7 +19,7 @@ export function SellerProvider({ children }) {
   useEffect(() => { reload(); }, [reload]);
 
   return (
-    <SellerContext.Provider value={{ me, loading, reload, ent: me?.entitlements, plan: me?.plan, shop: me?.shop, subscription: me?.subscription }}>
+    <SellerContext.Provider value={{ me, loading, reload, ent: me?.entitlements, plan: me?.plan, shop: me?.shop, subscription: me?.subscription, dashboardTheme: me?.dashboard_theme }}>
       {children}
     </SellerContext.Provider>
   );

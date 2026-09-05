@@ -12,6 +12,7 @@ export default function Login() {
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const adminLogin = location.pathname.startsWith("/admin");
 
   const submit = async (e) => {
     e.preventDefault();
@@ -19,12 +20,13 @@ export default function Login() {
     try {
       const { user } = await login(form.email, form.password);
       if (user.role === "seller") navigate("/seller/dashboard");
-      else navigate(location.state?.from || "/account");
+      else if (user.role === "admin") navigate(location.state?.from || "/admin/dashboard");
+      else navigate(location.state?.from || new URLSearchParams(location.search).get("next") || "/account");
     } catch (err) { setError(formatApiError(err)); } finally { setLoading(false); }
   };
 
   return (
-    <AuthShell title="Welcome back" subtitle="Sign in to your customer account.">
+    <AuthShell title={adminLogin ? "Admin sign in" : "Welcome back"} subtitle={adminLogin ? "Sign in with your NEXORA administrator account." : "Sign in to your customer account."}>
       <form onSubmit={submit} className="space-y-4" data-testid="login-form">
         {error && <div className="rounded-xl bg-[#FEECEC] px-4 py-3 text-sm text-red-600" data-testid="login-error">{error}</div>}
         <div className="relative">
@@ -38,10 +40,7 @@ export default function Login() {
         <div className="flex justify-end"><Link to="/forgot-password" className="text-sm font-medium text-nexora-emerald">Forgot password?</Link></div>
         <button disabled={loading} className="nx-btn-primary w-full" data-testid="login-submit">{loading ? "Signing in…" : "Sign in"}</button>
       </form>
-      <div className="my-5 flex items-center gap-3 text-xs text-nexora-muted"><div className="h-px flex-1 bg-nexora-border" /> OR <div className="h-px flex-1 bg-nexora-border" /></div>
-      <GoogleButton role="customer" />
-      <p className="mt-6 text-center text-sm text-nexora-muted">New to NEXORA? <Link to="/signup" className="font-semibold text-nexora-emerald" data-testid="to-signup">Create an account</Link></p>
-      <p className="mt-2 text-center text-sm text-nexora-muted">Want to sell? <Link to="/seller/login" className="font-semibold text-nexora-ink">Seller sign in</Link></p>
+      {!adminLogin && <><div className="my-5 flex items-center gap-3 text-xs text-nexora-muted"><div className="h-px flex-1 bg-nexora-border" /> OR <div className="h-px flex-1 bg-nexora-border" /></div><GoogleButton role="customer" /><p className="mt-6 text-center text-sm text-nexora-muted">New to NEXORA? <Link to="/signup" className="font-semibold text-nexora-emerald" data-testid="to-signup">Create an account</Link></p><p className="mt-2 text-center text-sm text-nexora-muted">Want to sell? <Link to="/seller/login" className="font-semibold text-nexora-ink">Seller sign in</Link></p></>}
     </AuthShell>
   );
 }

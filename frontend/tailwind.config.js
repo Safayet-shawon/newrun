@@ -16,14 +16,14 @@ module.exports = {
       },
       colors: {
         nexora: {
-          emerald: '#10B981',
-          emeraldDark: '#0D9668',
-          mint: '#2DD4BF',
-          mintbg: '#ECFDF5',
-          warm: '#FFFBF5',
-          ink: '#17211B',
-          muted: '#66736B',
-          border: '#E7EEE9',
+          emerald: '#6a4fd6',
+          emeraldDark: '#5139ad',
+          mint: '#a893f0',
+          mintbg: '#f2eff7',
+          warm: '#fbfbfa',
+          ink: '#1e1b2e',
+          muted: '#6b687b',
+          border: '#e4e2ed',
           coral: '#FF6B35',
           amber: '#F59E0B'
         },

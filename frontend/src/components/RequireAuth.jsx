@@ -8,7 +8,7 @@ export function RequireAuth({ children, role }) {
   const location = useLocation();
   if (loading) return <div className="min-h-screen bg-nexora-warm"><Loader label="Checking your session" /></div>;
   if (!user) {
-    const to = role === "seller" ? "/seller/login" : "/login";
+    const to = role === "seller" ? "/seller/login" : role === "admin" ? "/admin/login" : "/login";
     return <Navigate to={to} state={{ from: location.pathname }} replace />;
   }
   if (role && user.role !== role && user.role !== "admin") {

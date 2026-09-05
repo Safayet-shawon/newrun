@@ -1,139 +1,104 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { Search, Heart, ShoppingBag, User, Menu, X, Store, Tag, LayoutGrid, ChevronDown } from "lucide-react";
+import { Search, Heart, ShoppingCart, User, Menu, X, Store, Tag, MapPin, LayoutGrid, ChevronDown } from "lucide-react";
 import { Logo } from "@/components/shared/Bits";
 import { useStore } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
 
-export default function Header() {
+export default function Header({ onToggleDesktopSidebar }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { cartCount, wishlist } = useStore();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [q, setQ] = useState("");
   const [cats, setCats] = useState([]);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [catOpen, setCatOpen] = useState(false);
 
   useEffect(() => {
-    api.get("/categories").then(({ data }) => setCats(data)).catch(() => {});
+    api.get("/categories").then(({ data }) => setCats(Array.isArray(data) ? data : [])).catch(() => setCats([]));
   }, []);
-  useEffect(() => { setMenuOpen(false); setCatOpen(false); }, [location.pathname]);
+
+  useEffect(() => setMenuOpen(false), [location.pathname]);
 
   const submitSearch = (e) => {
     e.preventDefault();
-    navigate(`/search?q=${encodeURIComponent(q)}`);
+    if (q.trim()) navigate(`/search?q=${encodeURIComponent(q.trim())}`);
+  };
+
+  const openMenu = () => {
+    if (typeof window !== "undefined" && window.matchMedia("(min-width: 1280px)").matches) {
+      onToggleDesktopSidebar?.();
+      return;
+    }
+    setMenuOpen(true);
   };
 
   const accountLink = user ? (user.role === "seller" ? "/seller/dashboard" : "/account") : "/login";
 
   return (
-    <header className="sticky top-0 z-40 border-b border-nexora-border bg-white/95 backdrop-blur-md">
-      {/* top strip */}
-      <div className="hidden bg-nexora-mintbg text-nexora-emeraldDark md:block">
-        <div className="nx-container flex h-9 items-center justify-between text-xs font-medium">
-          <span>Free delivery across Bangladesh on orders over ৳2,000</span>
-          <div className="flex items-center gap-4">
-            <Link to="/seller/signup" className="hover:text-nexora-emerald" data-testid="become-seller-link">Sell on NEXORA</Link>
-            <span className="text-nexora-border">|</span>
-            <span>Help Center</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="nx-container flex h-16 items-center gap-4">
-        <button className="md:hidden" onClick={() => setMenuOpen(true)} data-testid="mobile-menu-open" aria-label="Menu">
-          <Menu size={24} className="text-nexora-ink" />
+    <header className="sticky top-0 z-40 border-b border-[#E5ECE8] bg-white/95 backdrop-blur-md">
+      <div className="flex h-14 items-center gap-3 px-3 sm:px-4 lg:px-4">
+        <button onClick={openMenu} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#F1F6F4] text-[#173128] transition hover:bg-[#E9F4EF]" aria-label="Open menu">
+          <Menu size={20} />
         </button>
-        <Logo />
 
-        <form onSubmit={submitSearch} className="relative mx-2 hidden flex-1 md:block" data-testid="search-form">
-          <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-nexora-muted" />
+        <Logo className="shrink-0" />
+
+        <form onSubmit={submitSearch} className="relative mx-1 hidden min-w-0 flex-1 md:block">
+          <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#7A8780]" />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search products, brands and shops…"
-            className="h-11 w-full rounded-full border border-nexora-border bg-nexora-warm pl-11 pr-4 text-sm outline-none transition-colors focus:border-nexora-emerald focus:bg-white"
-            data-testid="search-input"
+            placeholder="Search for products, brands, or shops..."
+            className="h-10 w-full rounded-xl border border-[#DDE7E1] bg-white pl-10 pr-14 text-[12px] outline-none transition focus:border-[#0A8D6C] focus:ring-2 focus:ring-[#0A8D6C]/10"
           />
+          <button className="absolute right-1.5 top-1/2 grid h-8 w-10 -translate-y-1/2 place-items-center rounded-lg bg-[#0A8D6C] text-white transition hover:bg-[#08795D]" aria-label="Search">
+            <Search size={15} />
+          </button>
         </form>
 
-        <nav className="hidden items-center gap-1 lg:flex">
-          <div className="relative" onMouseEnter={() => setCatOpen(true)} onMouseLeave={() => setCatOpen(false)}>
-            <button className="flex items-center gap-1 rounded-full px-3 py-2 text-sm font-medium text-nexora-ink hover:text-nexora-emerald" data-testid="nav-categories">
-              <LayoutGrid size={16} /> Categories <ChevronDown size={14} />
-            </button>
-            {catOpen && (
-              <div className="absolute left-0 top-full w-56 rounded-2xl border border-nexora-border bg-white p-2 shadow-lg">
-                {cats.map((c) => (
-                  <Link key={c.slug} to={`/category/${c.slug}`} className="flex items-center justify-between rounded-xl px-3 py-2 text-sm text-nexora-ink hover:bg-nexora-mintbg" data-testid={`nav-cat-${c.slug}`}>
-                    {c.name} <span className="text-xs text-nexora-muted">{c.product_count}</span>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-          <Link to="/shops" className="rounded-full px-3 py-2 text-sm font-medium text-nexora-ink hover:text-nexora-emerald" data-testid="nav-shops">Shops</Link>
-          <Link to="/deals" className="rounded-full px-3 py-2 text-sm font-medium text-nexora-coral hover:opacity-80" data-testid="nav-deals">Deals</Link>
-        </nav>
+        <div className="ml-auto flex items-center gap-0.5 sm:gap-1.5">
+          <button className="hidden items-center gap-2 rounded-xl px-2 py-1.5 text-[11px] font-semibold text-[#223029] lg:flex" type="button">
+            <MapPin size={18} />
+            <span className="leading-tight"><span className="block text-[9px] font-medium text-[#78857E]">Deliver to</span><span className="inline-flex items-center gap-1">Dhaka <ChevronDown size={11}/></span></span>
+          </button>
 
-        <div className="ml-auto flex items-center gap-1">
-          <Link to="/wishlist" className="relative grid h-10 w-10 place-items-center rounded-full text-nexora-ink hover:bg-nexora-mintbg" data-testid="nav-wishlist" aria-label="Wishlist">
-            <Heart size={20} />
-            {wishlist.length > 0 && <span className="absolute -right-0.5 -top-0.5 grid h-4.5 min-w-4.5 place-items-center rounded-full bg-nexora-coral px-1 text-[10px] font-bold text-white" style={{ height: 18, minWidth: 18 }}>{wishlist.length}</span>}
+          <Link to="/wishlist" className="relative grid h-9 w-9 place-items-center rounded-xl text-[#1E2B25] transition hover:bg-[#ECF7F2]" aria-label="Wishlist">
+            <Heart size={20}/>
+            {wishlist.length > 0 && <span className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-[#FF5E57] px-1 text-[8px] font-bold text-white">{wishlist.length}</span>}
           </Link>
-          <Link to="/cart" className="relative grid h-10 w-10 place-items-center rounded-full text-nexora-ink hover:bg-nexora-mintbg" data-testid="nav-cart" aria-label="Cart">
-            <ShoppingBag size={20} />
-            {cartCount > 0 && <span className="absolute -right-0.5 -top-0.5 grid place-items-center rounded-full bg-nexora-emerald px-1 text-[10px] font-bold text-white" style={{ height: 18, minWidth: 18 }}>{cartCount}</span>}
+
+          <Link to="/cart" className="relative grid h-9 w-9 place-items-center rounded-xl text-[#1E2B25] transition hover:bg-[#ECF7F2]" aria-label="Cart">
+            <ShoppingCart size={20}/>
+            {cartCount > 0 && <span className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-[#FF5E57] px-1 text-[8px] font-bold text-white">{cartCount}</span>}
           </Link>
-          {user ? (
-            <div className="group relative">
-              <button className="flex items-center gap-2 rounded-full border border-nexora-border py-1.5 pl-1.5 pr-3 hover:border-nexora-emerald" data-testid="nav-account">
-                <span className="grid h-7 w-7 place-items-center rounded-full bg-nexora-emerald text-xs font-bold text-white">{user.name?.[0]?.toUpperCase()}</span>
-                <span className="hidden text-sm font-medium sm:block">{user.name?.split(" ")[0]}</span>
-              </button>
-              <div className="invisible absolute right-0 top-full w-48 rounded-2xl border border-nexora-border bg-white p-2 opacity-0 shadow-lg transition-all group-hover:visible group-hover:opacity-100">
-                <Link to={accountLink} className="block rounded-xl px-3 py-2 text-sm hover:bg-nexora-mintbg" data-testid="account-menu-dashboard">{user.role === "seller" ? "Seller Dashboard" : "My Account"}</Link>
-                {user.role !== "seller" && <Link to="/account/orders" className="block rounded-xl px-3 py-2 text-sm hover:bg-nexora-mintbg">My Orders</Link>}
-                <button onClick={() => { logout(); navigate("/"); }} className="block w-full rounded-xl px-3 py-2 text-left text-sm text-nexora-coral hover:bg-[#FFEDE5]" data-testid="logout-btn">Log out</button>
-              </div>
-            </div>
-          ) : (
-            <Link to="/login" className="ml-1 hidden items-center gap-1.5 rounded-full bg-nexora-emerald px-4 py-2 text-sm font-semibold text-white hover:bg-nexora-emeraldDark sm:flex" data-testid="nav-login">
-              <User size={16} /> Sign in
-            </Link>
-          )}
+
+          <Link to={accountLink} className="grid h-9 w-9 place-items-center rounded-full border border-[#DCE5E0] bg-[#F8FAF9] text-[#1E2B25] transition hover:border-[#0A8D6C]" aria-label="Account">
+            <User size={19}/>
+          </Link>
         </div>
       </div>
 
-      {/* mobile search */}
-      <div className="border-t border-nexora-border p-3 md:hidden">
+      <div className="border-t border-[#E8EEEA] p-2.5 md:hidden">
         <form onSubmit={submitSearch} className="relative">
-          <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-nexora-muted" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search NEXORA…" className="h-11 w-full rounded-full border border-nexora-border bg-nexora-warm pl-11 pr-4 text-sm outline-none focus:border-nexora-emerald" data-testid="mobile-search-input" />
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#78857E]" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search NEXORA..." className="h-10 w-full rounded-xl border border-[#DDE7E1] bg-[#FAFCFB] pl-10 pr-12 text-[12px] outline-none focus:border-[#0A8D6C]" />
+          <button className="absolute right-1.5 top-1/2 grid h-7 w-9 -translate-y-1/2 place-items-center rounded-lg bg-[#0A8D6C] text-white"><Search size={14}/></button>
         </form>
       </div>
 
-      {/* mobile drawer */}
       {menuOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
-          <div className="absolute inset-0 bg-nexora-ink/40" onClick={() => setMenuOpen(false)} />
-          <div className="absolute left-0 top-0 h-full w-80 max-w-[85%] overflow-y-auto bg-white p-5">
-            <div className="mb-6 flex items-center justify-between">
-              <Logo />
-              <button onClick={() => setMenuOpen(false)} data-testid="mobile-menu-close"><X size={24} /></button>
-            </div>
-            <Link to="/shops" className="flex items-center gap-3 rounded-xl px-3 py-3 font-medium hover:bg-nexora-mintbg"><Store size={18} /> Shops</Link>
-            <Link to="/deals" className="flex items-center gap-3 rounded-xl px-3 py-3 font-medium text-nexora-coral hover:bg-nexora-mintbg"><Tag size={18} /> Deals</Link>
-            <p className="mt-4 px-3 text-xs font-semibold uppercase tracking-wide text-nexora-muted">Categories</p>
-            {cats.map((c) => (
-              <Link key={c.slug} to={`/category/${c.slug}`} className="block rounded-xl px-3 py-2.5 text-sm hover:bg-nexora-mintbg">{c.name}</Link>
-            ))}
-            <div className="mt-6 border-t border-nexora-border pt-4">
-              {!user && <Link to="/login" className="nx-btn-primary w-full">Sign in</Link>}
-              <Link to="/seller/signup" className="mt-2 block text-center text-sm font-medium text-nexora-emerald">Sell on NEXORA →</Link>
-            </div>
+        <div className="fixed inset-0 z-50 xl:hidden">
+          <div className="absolute inset-0 bg-[#17211B]/35" onClick={() => setMenuOpen(false)} />
+          <div className="absolute left-0 top-0 h-full w-80 max-w-[86%] overflow-y-auto bg-white p-5 shadow-2xl">
+            <div className="mb-5 flex items-center justify-between"><Logo showTagline/><button onClick={() => setMenuOpen(false)} className="grid h-9 w-9 place-items-center rounded-lg hover:bg-[#F4F7F5]"><X size={22}/></button></div>
+            <Link to="/" className="flex items-center gap-3 rounded-xl px-3 py-3 font-semibold hover:bg-[#ECF7F2]"><LayoutGrid size={18}/> Home</Link>
+            <Link to="/shops" className="flex items-center gap-3 rounded-xl px-3 py-3 font-semibold hover:bg-[#ECF7F2]"><Store size={18}/> Shops</Link>
+            <Link to="/deals" className="flex items-center gap-3 rounded-xl px-3 py-3 font-semibold text-[#E55243] hover:bg-[#FFF2F0]"><Tag size={18}/> Deals</Link>
+            {cats.length > 0 && <p className="mt-5 px-3 text-[10px] font-bold uppercase tracking-wider text-[#78857E]">Categories</p>}
+            {cats.map((c) => <Link key={c.slug} to={`/category/${c.slug}`} className="block rounded-xl px-3 py-2.5 text-sm hover:bg-[#ECF7F2]">{c.name}</Link>)}
+            <Link to="/seller/signup" className="mt-5 flex items-center justify-center rounded-xl bg-[#0A8D6C] px-4 py-3 text-sm font-bold text-white">Become a Seller</Link>
           </div>
         </div>
       )}

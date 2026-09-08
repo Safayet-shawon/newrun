@@ -49,9 +49,20 @@ import ReviewsPage from "@/pages/seller/ReviewsPage";
 import Analytics from "@/pages/seller/Analytics";
 import Settings from "@/pages/seller/Settings";
 import Notifications from "@/pages/seller/Notifications";
+
 import AdminLayout from "@/pages/admin/AdminLayout";
-import SellerDashboardThemes from "@/pages/admin/SellerDashboardThemes";
-import { AdminOverview, AdminOrders, AdminCustomers, AdminSellers, AdminCatalogue, AdminFinance, AdminSettings, AdminAudit } from "@/pages/admin/AdminSections";
+import AdminTokens from "@/pages/admin/AdminTokens";
+import {
+  OwnerOverview,
+  SellersSubscriptions,
+  CategoriesAdmin,
+  FeaturedShops,
+  RevenueCommission,
+  BuyersCustomers,
+  PendingConfirmations,
+  AddSubscription,
+  OwnerSettings,
+} from "@/pages/admin/NexoraAdminPages";
 
 const M = (C) => (
   <MarketplaceLayout>
@@ -122,17 +133,18 @@ function AppRoutes() {
         <Route path="notifications" element={<Notifications />} />
       </Route>
 
-      {/* Owner admin */}
+      {/* Owner admin — Nexora structure */}
       <Route path="/admin/dashboard" element={<RequireAuth role="admin"><AdminLayout /></RequireAuth>}>
-        <Route index element={<AdminOverview />} />
-        <Route path="orders" element={<AdminOrders />} />
-        <Route path="customers" element={<AdminCustomers />} />
-        <Route path="sellers" element={<AdminSellers />} />
-        <Route path="catalogue" element={<AdminCatalogue />} />
-        <Route path="finance" element={<AdminFinance />} />
-        <Route path="settings" element={<AdminSettings />} />
-        <Route path="audit" element={<AdminAudit />} />
-        <Route path="themes" element={<SellerDashboardThemes />} />
+        <Route index element={<OwnerOverview />} />
+        <Route path="sellers" element={<SellersSubscriptions />} />
+        <Route path="categories" element={<CategoriesAdmin />} />
+        <Route path="featured" element={<FeaturedShops />} />
+        <Route path="revenue" element={<RevenueCommission />} />
+        <Route path="buyers" element={<BuyersCustomers />} />
+        <Route path="pending" element={<PendingConfirmations />} />
+        <Route path="subscriptions" element={<AddSubscription />} />
+        <Route path="tokens" element={<AdminTokens />} />
+        <Route path="settings" element={<OwnerSettings />} />
       </Route>
 
       <Route path="*" element={M(Home)} />

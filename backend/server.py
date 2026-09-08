@@ -17,8 +17,12 @@ import commerce
 import orders
 import wallet
 import admin
+import subscription_tokens
+import owner_admin
 import seed as seed_module
 import storage
+
+subscription_tokens.install_seller_expiry_guard(seller)
 
 app = FastAPI(title="NEXORA API")
 
@@ -29,6 +33,8 @@ app.include_router(commerce.router, prefix="/api")
 app.include_router(orders.router, prefix="/api")
 app.include_router(wallet.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
+app.include_router(subscription_tokens.router, prefix="/api")
+app.include_router(owner_admin.router, prefix="/api")
 
 app.add_middleware(
     CORSMiddleware,
@@ -51,6 +57,7 @@ async def root():
 async def startup():
     try:
         await seed_module.ensure_indexes()
+        await subscription_tokens.ensure_indexes()
     except Exception as e:
         logger.error(f"Index setup: {e}")
     try:

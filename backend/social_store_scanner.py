@@ -1,8 +1,8 @@
 """Browser-assisted social catalogue import for seller-owned Facebook pages.
 
-Facebook often requires login/verification and renders posts dynamically, so
-Nexora only reads what the seller can see in the temporary assisted browser.
-It never asks for Facebook credentials and never bypasses login/CAPTCHA.
+The assisted-browser start route also preserves the exact source path for
+ordinary websites, so product/category URLs are not reduced to the homepage.
+Facebook login/verification is always completed manually by the seller.
 """
 import re
 from datetime import datetime, timezone
@@ -62,17 +62,14 @@ def _title(text):
     for chunk in chunks:
         if 3 <= len(chunk) <= 140 and not PRICE_PATTERNS[0].search(chunk):
             return chunk
-    words = raw.split()
-    return " ".join(words[:14])[:140]
+    return " ".join(raw.split()[:14])[:140]
 
 
 def _post_product(post):
     text = post.get("text") or ""
     price = _price(text)
-    if not price or price <= 0:
-        return None
     images = post.get("images") or []
-    if not images or len(text) < 8:
+    if not price or price <= 0 or not images or len(text) < 8:
         return None
     title = _title(text)
     if not title:
@@ -114,21 +111,23 @@ class SocialStartBody(BaseModel):
     confirm_rights: bool = False
 
 
+@router.post("/seller/import-store/manual/start")
 @router.post("/seller/import-store/social/manual/start")
-async def start_social(body: SocialStartBody, user: dict = Depends(seller_dep)):
+async def start_assisted(body: SocialStartBody, user: dict = Depends(seller_dep)):
     await store_importer._require_import(user)
     if not body.confirm_rights:
-        raise HTTPException(422, "Confirm ownership/permission before Facebook import")
+        raise HTTPException(422, "Confirm ownership/permission before assisted import")
     await browser._cleanup_sessions()
 
     raw = body.url.strip()
     if not raw.startswith(("http://", "https://")):
         raw = "https://" + raw
     parsed = urlparse(raw)
-    if not parsed.hostname or "facebook.com" not in parsed.hostname.lower():
-        raise HTTPException(422, "Enter a Facebook Page URL")
+    if not parsed.hostname:
+        raise HTTPException(422, "Enter a valid public website or Facebook Page URL")
     universal._assert_public(raw)
     origin = universal._origin(raw)
+    is_facebook = "facebook.com" in parsed.hostname.lower()
 
     for session_id, session in list(browser._manual_sessions.items()):
         if session.get("seller_id") == user["id"]:
@@ -154,7 +153,7 @@ async def start_social(body: SocialStartBody, user: dict = Depends(seller_dep)):
             await pw.stop()
         except Exception:
             pass
-        raise HTTPException(503, "Could not open Facebook in the assisted browser. Install Chrome/Chromium or run `py -m playwright install chromium`.") from exc
+        raise HTTPException(503, "Could not open the assisted browser. Install Chrome/Chromium or run `py -m playwright install chromium`.") from exc
 
     session_id = new_id("browser_")
     browser._manual_sessions[session_id] = {
@@ -174,16 +173,18 @@ async def start_social(body: SocialStartBody, user: dict = Depends(seller_dep)):
     except Exception:
         html_text, body_text = "", ""
     challenge_type, challenge_message = browser._challenge_from(page.url, html_text, body_text)
+    default_message = (
+        "Facebook opened on your Page. If asked, log in or finish verification yourself. Open the Page posts/photos/shop area and let products load, then return to Nexora and click Continue scan."
+        if is_facebook
+        else "Browser opened at the exact source URL. If needed, log in or solve CAPTCHA there. Navigate until products are visible, then return to Nexora and click Continue scan."
+    )
     return {
         "session_id": session_id,
         "status": "waiting_for_user",
-        "challenge_type": challenge_type or "facebook_navigation",
-        "message": challenge_message or (
-            "Facebook opened on your Page. If asked, log in or finish verification yourself. "
-            "Open the Page posts/photos/shop area and let products load, then return to Nexora and click Continue scan."
-        ),
+        "challenge_type": challenge_type or ("facebook_navigation" if is_facebook else "navigation"),
+        "message": challenge_message or default_message,
         "expires_in_minutes": browser.MANUAL_TTL_MINUTES,
-        "privacy_note": "Facebook credentials stay inside the temporary browser session and are discarded when it closes.",
+        "privacy_note": "Credentials stay inside the temporary browser session and are discarded when it closes.",
     }
 
 
@@ -233,8 +234,7 @@ async def continue_social(session_id: str, user: dict = Depends(seller_dep)):
             "manual_required": True,
             "challenge_type": "navigation",
             "message": (
-                "Nexora can see Facebook, but no product posts with a visible price and image were found yet. "
-                "Open your Page's Posts/Photos/Shop area in the assisted browser, scroll until products are visible, then click Continue scan again."
+                "Nexora can see Facebook, but no product posts with a visible price and image were found yet. Open your Page's Posts/Photos/Shop area in the assisted browser, scroll until products are visible, then click Continue scan again."
             ),
             "count": 0,
             "products": [],

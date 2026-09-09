@@ -24,6 +24,8 @@ import store_importer
 import universal_store_scanner
 import browser_store_scanner
 import deep_store_scanner
+import deep_catalog_scanner
+import catalogue_scan_gateway
 import social_store_scanner_v2
 import import_ai_v2
 import seed as seed_module
@@ -31,11 +33,10 @@ import storage
 
 subscription_tokens.install_seller_expiry_guard(seller)
 
-# Use the deeper multi-layer catalogue scanner everywhere the legacy importer
-# asks for a source refresh. The browser router's /scan endpoint also calls its
-# module-level composite scanner, so point that at the same coordinator.
-store_importer.scan_store_sync = deep_store_scanner.composite_scan_sync
-browser_store_scanner.composite_scan_sync = deep_store_scanner.composite_scan_sync
+# Auto-sync and manual scans use the deep multi-page scanner. The gateway owns
+# the public /scan endpoint and sends Facebook links directly to assisted mode.
+store_importer.scan_store_sync = deep_catalog_scanner.deep_scan_sync
+browser_store_scanner.composite_scan_sync = deep_catalog_scanner.deep_scan_sync
 
 app = FastAPI(title="NEXORA API")
 
@@ -48,15 +49,10 @@ app.include_router(wallet.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(subscription_tokens.router, prefix="/api")
 app.include_router(owner_admin.router, prefix="/api")
-
-# V2 intelligence is registered instead of the older v1 router.
 app.include_router(seller_intelligence_v2.router, prefix="/api")
 
-# Route order matters here. Social v2 owns the assisted-browser start route so
-# Facebook/page URLs keep their exact path and never go through the ordinary
-# public HTTP catalogue scanner. Browser scanner owns enhanced /scan. Import AI
-# v2 owns preparation/chat/import. Legacy store_importer remains last for the
-# profile, sync settings and sync-now endpoints.
+# Route order is intentional.
+app.include_router(catalogue_scan_gateway.router, prefix="/api")
 app.include_router(social_store_scanner_v2.router, prefix="/api")
 app.include_router(browser_store_scanner.router, prefix="/api")
 app.include_router(import_ai_v2.router, prefix="/api")

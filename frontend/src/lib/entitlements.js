@@ -1,8 +1,8 @@
-// Frontend mirror of backend entitlements for instant UI gating (single source pattern).
+// Frontend mirror of backend entitlements for instant UI gating.
 export const PLAN_META = {
-  start: { id: "start", name: "START", price: 500, color: "#66736B" },
-  grow: { id: "grow", name: "GROW", price: 1500, color: "#10B981" },
-  pro: { id: "pro", name: "PRO", price: 3000, color: "#F59E0B" },
+  start: { id: "start", name: "START", price: 500, color: "#66736B", tagline: "Start selling" },
+  grow: { id: "grow", name: "GROW", price: 1500, color: "#10B981", tagline: "Grow your business" },
+  pro: { id: "pro", name: "PRO", price: 3000, color: "#F59E0B", tagline: "Nexora Intelligence" },
 };
 
 export const PLAN_ORDER = ["start", "grow", "pro"];
@@ -11,13 +11,11 @@ export function planRank(plan) {
   return PLAN_ORDER.indexOf(plan);
 }
 
-// Given the entitlements object from backend, check a feature.
 export function can(entitlements, feature) {
   if (!entitlements) return false;
   return !!entitlements[feature];
 }
 
-// Human labels for locked-feature messaging.
 export const FEATURE_LABELS = {
   theme_switching: "Switch storefront themes",
   custom_accent_color: "Custom brand colors",
@@ -30,11 +28,38 @@ export const FEATURE_LABELS = {
   staff_accounts: "Staff accounts",
   ai_features: "AI feature suite",
   priority_support: "Priority support",
+  marketplace_intelligence: "Nexora Marketplace Intelligence",
+  demand_analysis: "Marketplace demand analysis",
+  competitor_benchmark: "Anonymous marketplace benchmarking",
+  ai_product_suggestions: "AI product opportunity suggestions",
+  ai_pricing: "AI pricing intelligence",
+  store_import: "Import an existing website",
+  auto_store_sync: "Automatic store sync",
 };
 
 export function requiredPlanFor(feature) {
-  const grow = ["theme_switching", "custom_accent_color", "advanced_analytics", "bulk_management", "marketing_tools", "customer_insights", "abandoned_cart", "staff_accounts"];
-  const pro = ["custom_css", "ai_features", "priority_support"];
+  const grow = [
+    "theme_switching",
+    "custom_accent_color",
+    "advanced_analytics",
+    "bulk_management",
+    "marketing_tools",
+    "customer_insights",
+    "abandoned_cart",
+    "staff_accounts",
+  ];
+  const pro = [
+    "custom_css",
+    "ai_features",
+    "priority_support",
+    "marketplace_intelligence",
+    "demand_analysis",
+    "competitor_benchmark",
+    "ai_product_suggestions",
+    "ai_pricing",
+    "store_import",
+    "auto_store_sync",
+  ];
   if (pro.includes(feature)) return "pro";
   if (grow.includes(feature)) return "grow";
   return "start";

@@ -22,14 +22,16 @@ import owner_admin
 import seller_intelligence
 import store_importer
 import universal_store_scanner
+import browser_store_scanner
 import seed as seed_module
 import storage
 
 subscription_tokens.install_seller_expiry_guard(seller)
 
-# Upgrade the existing PRO import routes and sync worker to the multi-layer
-# universal public-store scanner without changing their API contract.
-store_importer.scan_store_sync = universal_store_scanner.scan_store_sync
+# Fast public scan first; when that returns no catalogue, fall back to a real
+# rendered Chromium pass. The existing import + auto-sync flow keeps the same
+# normalized product contract.
+store_importer.scan_store_sync = browser_store_scanner.composite_scan_sync
 
 app = FastAPI(title="NEXORA API")
 
@@ -43,6 +45,9 @@ app.include_router(admin.router, prefix="/api")
 app.include_router(subscription_tokens.router, prefix="/api")
 app.include_router(owner_admin.router, prefix="/api")
 app.include_router(seller_intelligence.router, prefix="/api")
+# Included before the legacy store importer so the enhanced /scan route wins;
+# all other import/profile/sync routes continue to come from store_importer.
+app.include_router(browser_store_scanner.router, prefix="/api")
 app.include_router(store_importer.router, prefix="/api")
 
 app.add_middleware(
@@ -90,6 +95,7 @@ async def startup():
 @app.on_event("shutdown")
 async def shutdown():
     try:
+        await browser_store_scanner.close_all_manual_sessions()
         await store_importer.stop_sync_worker()
     finally:
         from db import client

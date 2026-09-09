@@ -21,10 +21,15 @@ import subscription_tokens
 import owner_admin
 import seller_intelligence
 import store_importer
+import universal_store_scanner
 import seed as seed_module
 import storage
 
 subscription_tokens.install_seller_expiry_guard(seller)
+
+# Upgrade the existing PRO import routes and sync worker to the multi-layer
+# universal public-store scanner without changing their API contract.
+store_importer.scan_store_sync = universal_store_scanner.scan_store_sync
 
 app = FastAPI(title="NEXORA API")
 

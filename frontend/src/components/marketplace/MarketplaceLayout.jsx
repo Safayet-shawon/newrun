@@ -2,10 +2,12 @@ import React, { useState } from "react";
 import Footer from "@/components/marketplace/Footer";
 import MobileBottomNav from "@/components/marketplace/MobileBottomNav";
 import Header from "@/components/marketplace/Header";
+import DesktopSidebar from "@/components/marketplace/DesktopSidebar";
 import { useLocation } from "react-router-dom";
 
 export default function MarketplaceLayout({ children }) {
   const { pathname } = useLocation();
+  const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
   if (pathname === "/") return children;
   return (
     <div className="min-h-screen bg-[#F7FAF8] xl:flex">

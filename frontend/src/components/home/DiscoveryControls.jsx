@@ -14,7 +14,7 @@ export function ProductControls({ state, categories, isDemo }) {
     <div className="home-discovery-categories" aria-label="Choose a product category">{[{slug:"all",name:"All categories"},...categories].map(c => <button key={c.slug} aria-pressed={filters.category === c.slug} onClick={() => update({ category:c.slug, query:"", saved:false })}>{c.name}</button>)}</div>
     <div className="home-collection-controls"><div aria-label="Choose a collection">{collections.map(c => <button key={c.id} aria-pressed={filters.collection === c.id} onClick={() => c.id === "following" && !user ? navigate("/login",{state:{from:"/"}}) : update({ collection:c.id })}>{c.label}</button>)}</div><span>{isDemo ? "Sample order" : collections.find(c=>c.id===filters.collection)?.detail}</span></div>
     {(filters.brand || filters.query || filters.saved) && <div className="home-active-filters"><span>{filters.brand && `Brand: ${filters.brand}`}{filters.query && ` Search: “${filters.query}”`}{filters.saved && "Saved preview items"}</span><button onClick={state.reset}>Clear filters <X size={12} /></button></div>}
-    <span className="home-results-status" role="status">{state.loading ? "Loading products…" : state.error ? "Products are temporarily unavailable." : `${total} ${isDemo ? "sample " : ""}product${total === 1 ? "" : "s"}`}</span>
+    <span className="home-results-status" role="status">{state.loading ? "Loading products…" : state.error ? "Products are temporarily unavailable. Check that the backend and database are running." : `${total} ${isDemo ? "sample " : ""}product${total === 1 ? "" : "s"}`}</span>
   </>;
 }
 

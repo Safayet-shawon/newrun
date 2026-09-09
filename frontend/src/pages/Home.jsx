@@ -21,7 +21,7 @@ export default function Home() {
   useEffect(()=>{
     const controller = new AbortController();
     setError(false);
-    api.get("/home",{signal:controller.signal,timeout:8000}).then(({data})=>setData(data)).catch(e=>{if(e.code!=="ERR_CANCELED")setError(true);});
+    api.get("/home",{signal:controller.signal,timeout:5000}).then(({data})=>setData(data)).catch(e=>{if(e.code!=="ERR_CANCELED")setError(true);});
     return ()=>controller.abort();
   },[attempt]);
   const state = useHomeDiscovery({ready:!!data,isDemo:false,demoProducts:[],saved:[]});

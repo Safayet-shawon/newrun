@@ -58,7 +58,7 @@ export default function useHomeDiscovery({ ready, isDemo, demoProducts, saved })
     const controller = new AbortController();
     setLoading(true); setError(false);
     const params = buildProductParams(filters, pageSize);
-    api.get("/products", { params, signal: controller.signal, timeout: 8000 }).then(({ data }) => setLive(data)).catch(e => { if (e.code !== "ERR_CANCELED") setError(true); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    api.get("/products", { params, signal: controller.signal, timeout: 5000 }).then(({ data }) => setLive(data)).catch(e => { if (e.code !== "ERR_CANCELED") setError(true); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [ready, isDemo, filters, retry, pageSize, user]);
   const demo = useMemo(() => selectDemoProducts(demoProducts, filters, saved), [demoProducts, filters, saved]);

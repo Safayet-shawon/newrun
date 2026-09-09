@@ -7,6 +7,9 @@ import {
   CheckCircle2,
   AlertTriangle,
   Zap,
+  Monitor,
+  ShieldCheck,
+  XCircle,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import LockGate from "@/components/seller/LockGate";
@@ -25,6 +28,8 @@ export default function StoreImport() {
   const [selected, setSelected] = useState(new Set());
   const [importing, setImporting] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [manual, setManual] = useState(null);
+  const [manualBusy, setManualBusy] = useState(false);
 
   const selectedCount = selected.size;
   const allSelected = scan?.products?.length > 0 && selectedCount === scan.products.length;
@@ -39,6 +44,11 @@ export default function StoreImport() {
     loadProfile();
   }, [allowed]);
 
+  const applyScanResult = (data) => {
+    setScan(data);
+    setSelected(new Set((data.products || []).map((p) => p.source_key)));
+  };
+
   const scanWebsite = async (e) => {
     e.preventDefault();
     if (!confirmed) {
@@ -47,18 +57,77 @@ export default function StoreImport() {
     }
     setScanning(true);
     setScan(null);
+    setManual(null);
     try {
       const { data } = await api.post("/seller/import-store/scan", {
         url,
         confirm_rights: true,
       });
-      setScan(data);
-      setSelected(new Set(data.products.map((p) => p.source_key)));
-      toast.success(`Found ${data.count} product(s)`);
+      applyScanResult(data);
+      if (data.count > 0) {
+        toast.success(`Found ${data.count} product(s)`);
+      } else if (data.manual_required) {
+        toast.info("Automatic scan needs your help. Use the assisted browser below.");
+      } else {
+        toast.info("No products were found automatically.");
+      }
     } catch (err) {
       toast.error(err.response?.data?.detail || "Could not scan the website");
     } finally {
       setScanning(false);
+    }
+  };
+
+  const startManualBrowser = async () => {
+    if (!confirmed) {
+      toast.error("Confirm website ownership/permission first.");
+      return;
+    }
+    setManualBusy(true);
+    try {
+      const { data } = await api.post("/seller/import-store/manual/start", {
+        url: scan?.website_url || url,
+        confirm_rights: true,
+      });
+      setManual(data);
+      toast.success("Assisted browser opened. Complete any login/CAPTCHA there.");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Could not open assisted browser");
+    } finally {
+      setManualBusy(false);
+    }
+  };
+
+  const continueManualBrowser = async () => {
+    if (!manual?.session_id) return;
+    setManualBusy(true);
+    try {
+      const { data } = await api.post(
+        `/seller/import-store/manual/${manual.session_id}/continue`
+      );
+      if (data.scan_id && data.count > 0) {
+        applyScanResult(data);
+        setManual(null);
+        toast.success(`Found ${data.count} product(s) after browser verification`);
+      } else {
+        setManual((prev) => ({ ...prev, ...data }));
+        toast.info(data.message || "More manual navigation is needed.");
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Could not continue browser scan");
+    } finally {
+      setManualBusy(false);
+    }
+  };
+
+  const cancelManualBrowser = async () => {
+    const sessionId = manual?.session_id;
+    setManual(null);
+    if (!sessionId) return;
+    try {
+      await api.post(`/seller/import-store/manual/${sessionId}/cancel`);
+    } catch {
+      // Session may already be closed/expired; nothing else to do.
     }
   };
 
@@ -138,6 +207,16 @@ export default function StoreImport() {
 
   if (profile === null) return <Loader label="Loading store importer" />;
 
+  const challengeType = manual?.challenge_type || scan?.challenge_type;
+  const challengeTitle =
+    challengeType === "captcha"
+      ? "This store needs CAPTCHA / human verification"
+      : challengeType === "login"
+        ? "This store needs you to log in"
+        : challengeType === "browser_setup"
+          ? "Rendered browser setup is required"
+          : "Nexora needs a browser-assisted scan";
+
   return (
     <div className="space-y-6">
       <section className="rounded-3xl border border-nexora-border bg-white p-6">
@@ -151,7 +230,7 @@ export default function StoreImport() {
               <span className="rounded-full bg-[#FFF1CC] px-2.5 py-1 text-[11px] font-extrabold text-[#A96D00]">PRO</span>
             </div>
             <p className="mt-1 text-sm text-nexora-muted">
-              Paste a public ecommerce URL. Nexora automatically detects the store type, scans product sources and prepares an import preview.
+              Paste an ecommerce URL. Nexora scans public data first, then uses a rendered browser fallback for JavaScript stores.
             </p>
           </div>
         </div>
@@ -180,8 +259,9 @@ export default function StoreImport() {
         </form>
 
         <div className="mt-4 rounded-2xl bg-[#F8FAF9] p-4 text-xs leading-5 text-nexora-muted">
-          Nexora checks Shopify, WooCommerce, sitemaps, JSON-LD, product pages, embedded app data and same-site public product APIs automatically.
-          It does not bypass logins, private APIs, CAPTCHA or anti-bot protection. Large custom stores can take a little longer to scan.
+          Nexora checks Shopify, WooCommerce, sitemaps, JSON-LD, embedded app data, public product APIs and rendered product pages.
+          If a store requires login or CAPTCHA, Nexora will ask you to complete that step yourself in a temporary browser window.
+          Nexora does not ask for or store the store password in this import form.
         </div>
       </section>
 
@@ -220,19 +300,74 @@ export default function StoreImport() {
             </div>
           )}
 
-          {scan.warnings?.map((warning) => {
-            const message = warning.includes("Generic sites should expose schema.org Product JSON-LD")
-              ? "No importable products were found after the public scan. The store may keep its catalogue behind a private/unsupported API, require login, or block automated access."
-              : warning;
-            return (
-              <div key={warning} className="mt-3 flex items-start gap-2 rounded-xl bg-[#FFFCF5] p-3 text-xs text-nexora-amber">
-                <AlertTriangle size={15} className="mt-0.5 shrink-0" /> {message}
+          {(scan.manual_required || (!scan.count && scan.browser_assist_available)) && (
+            <div className="mt-4 rounded-2xl border border-[#F3D9A2] bg-[#FFFCF5] p-4">
+              <div className="flex items-start gap-3">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-nexora-amber">
+                  <Monitor size={19} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-extrabold text-nexora-ink">{challengeTitle}</h3>
+                  <p className="mt-1 text-sm leading-6 text-nexora-muted">
+                    {manual?.message || scan.manual_message ||
+                      "Automatic extraction could not finish. Open the assisted browser, navigate until the products are visible, then continue the scan."}
+                  </p>
+
+                  {!manual ? (
+                    <div className="mt-3">
+                      <button
+                        onClick={startManualBrowser}
+                        disabled={manualBusy || scan.browser_assist_available === false}
+                        className="nx-btn-primary"
+                      >
+                        <Monitor size={15} />
+                        {manualBusy ? "Opening browser..." : "Open browser to continue"}
+                      </button>
+                      {scan.browser_assist_available === false && (
+                        <p className="mt-2 text-xs text-nexora-coral">
+                          Browser assistance is not available on this backend yet. Install the updated backend requirements first.
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="mt-4 rounded-xl border border-nexora-border bg-white p-4">
+                      <div className="flex items-start gap-2">
+                        <ShieldCheck size={18} className="mt-0.5 shrink-0 text-nexora-emerald" />
+                        <div>
+                          <p className="text-sm font-bold text-nexora-ink">Temporary browser is open</p>
+                          <p className="mt-1 text-xs leading-5 text-nexora-muted">
+                            Complete the login/CAPTCHA there if required. You can also manually open the shop or a product page.
+                            When products are visible, return here and click Continue scan.
+                          </p>
+                          {manual.privacy_note && (
+                            <p className="mt-2 text-xs font-medium text-nexora-emerald">{manual.privacy_note}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button onClick={continueManualBrowser} disabled={manualBusy} className="nx-btn-primary">
+                          <Search size={15} />
+                          {manualBusy ? "Reading products..." : "Continue scan"}
+                        </button>
+                        <button onClick={cancelManualBrowser} disabled={manualBusy} className="nx-btn-ghost">
+                          <XCircle size={15} /> Cancel browser
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-            );
-          })}
+            </div>
+          )}
+
+          {scan.warnings?.map((warning) => (
+            <div key={warning} className="mt-3 flex items-start gap-2 rounded-xl bg-[#FFFCF5] p-3 text-xs text-nexora-amber">
+              <AlertTriangle size={15} className="mt-0.5 shrink-0" /> {warning}
+            </div>
+          ))}
 
           <div className="mt-4 max-h-[520px] divide-y divide-nexora-border overflow-y-auto rounded-xl border border-nexora-border">
-            {scan.products.map((p) => (
+            {(scan.products || []).map((p) => (
               <label key={p.source_key} className="flex cursor-pointer items-center gap-3 p-3 hover:bg-[#FAFCFB]">
                 <input
                   type="checkbox"
@@ -259,7 +394,7 @@ export default function StoreImport() {
             ))}
             {!scan.products?.length && (
               <div className="p-6 text-center text-sm text-nexora-muted">
-                No public product records could be extracted from this store.
+                No products are ready for import yet. Use browser assistance above if Nexora asks for it.
               </div>
             )}
           </div>
@@ -276,7 +411,7 @@ export default function StoreImport() {
               </div>
               <p className="mt-1 text-sm text-nexora-muted">{profile.website_url}</p>
               <p className="mt-1 text-xs text-nexora-muted">
-                Every {profile.interval_hours || 6} hours · price, stock, title, description and images can stay synchronized.
+                Every {profile.interval_hours || 6} hours · price, stock, title, description and images can stay synchronized when the source remains publicly accessible.
               </p>
               {profile.last_sync_at && (
                 <p className="mt-1 text-xs text-nexora-muted">Last sync: {new Date(profile.last_sync_at).toLocaleString()}</p>

@@ -23,14 +23,16 @@ import seller_intelligence
 import store_importer
 import universal_store_scanner
 import browser_store_scanner
+import social_store_scanner
+import import_ai
 import seed as seed_module
 import storage
 
 subscription_tokens.install_seller_expiry_guard(seller)
 
 # Fast public scan first; when that returns no catalogue, fall back to a real
-# rendered Chromium pass. The existing import + auto-sync flow keeps the same
-# normalized product contract.
+# rendered Chromium pass. The existing sync worker keeps the same normalized
+# product contract.
 store_importer.scan_store_sync = browser_store_scanner.composite_scan_sync
 
 app = FastAPI(title="NEXORA API")
@@ -45,9 +47,10 @@ app.include_router(admin.router, prefix="/api")
 app.include_router(subscription_tokens.router, prefix="/api")
 app.include_router(owner_admin.router, prefix="/api")
 app.include_router(seller_intelligence.router, prefix="/api")
-# Included before the legacy store importer so the enhanced /scan route wins;
-# all other import/profile/sync routes continue to come from store_importer.
+# Enhanced browser scan route comes before the legacy importer /scan route.
 app.include_router(browser_store_scanner.router, prefix="/api")
+app.include_router(social_store_scanner.router, prefix="/api")
+app.include_router(import_ai.router, prefix="/api")
 app.include_router(store_importer.router, prefix="/api")
 
 app.add_middleware(

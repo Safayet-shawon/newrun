@@ -47,8 +47,8 @@ import Orders from "@/pages/seller/Orders";
 import Customers from "@/pages/seller/Customers";
 import ReviewsPage from "@/pages/seller/ReviewsPage";
 import Analytics from "@/pages/seller/Analytics";
-import Intelligence from "@/pages/seller/Intelligence";
-import StoreImport from "@/pages/seller/StoreImport";
+import Intelligence from "@/pages/seller/IntelligenceV2";
+import StoreImport from "@/pages/seller/StoreImportV2";
 import Settings from "@/pages/seller/Settings";
 import Notifications from "@/pages/seller/Notifications";
 

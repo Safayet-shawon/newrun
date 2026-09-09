@@ -151,7 +151,7 @@ export default function StoreImport() {
               <span className="rounded-full bg-[#FFF1CC] px-2.5 py-1 text-[11px] font-extrabold text-[#A96D00]">PRO</span>
             </div>
             <p className="mt-1 text-sm text-nexora-muted">
-              Paste your website. Nexora scans public product data and prepares an import preview.
+              Paste a public ecommerce URL. Nexora automatically detects the store type, scans product sources and prepares an import preview.
             </p>
           </div>
         </div>
@@ -165,7 +165,7 @@ export default function StoreImport() {
               className="min-w-0 flex-1 rounded-xl border border-nexora-border px-4 py-3 text-sm outline-none focus:border-nexora-emerald"
             />
             <button disabled={scanning || !url.trim()} className="nx-btn-primary justify-center">
-              <Search size={15} /> {scanning ? "Scanning..." : "Scan Store"}
+              <Search size={15} /> {scanning ? "Scanning store..." : "Scan Store"}
             </button>
           </div>
           <label className="flex items-start gap-2 text-xs text-nexora-muted">
@@ -180,8 +180,8 @@ export default function StoreImport() {
         </form>
 
         <div className="mt-4 rounded-2xl bg-[#F8FAF9] p-4 text-xs leading-5 text-nexora-muted">
-          Best support: Shopify, WooCommerce Store API, and websites exposing schema.org Product JSON-LD.
-          Nexora does not bypass logins, private APIs, or anti-bot protection.
+          Nexora checks Shopify, WooCommerce, sitemaps, JSON-LD, product pages, embedded app data and same-site public product APIs automatically.
+          It does not bypass logins, private APIs, CAPTCHA or anti-bot protection. Large custom stores can take a little longer to scan.
         </div>
       </section>
 
@@ -191,10 +191,10 @@ export default function StoreImport() {
             <div>
               <p className="text-xs font-bold uppercase tracking-wide text-nexora-muted">Scan result</p>
               <h2 className="text-xl font-extrabold text-nexora-ink">{scan.count} product(s) found</h2>
-              <p className="text-xs text-nexora-muted">Detected platform: {scan.platform}</p>
+              <p className="text-xs text-nexora-muted">Detected source: {scan.platform}</p>
             </div>
             <div className="flex gap-2">
-              <button onClick={toggleAll} className="nx-btn-ghost">
+              <button onClick={toggleAll} className="nx-btn-ghost" disabled={!scan.products?.length}>
                 {allSelected ? "Clear all" : "Select all"}
               </button>
               <button disabled={importing || selectedCount === 0} onClick={doImport} className="nx-btn-primary">
@@ -203,11 +203,33 @@ export default function StoreImport() {
             </div>
           </div>
 
-          {scan.warnings?.map((warning) => (
-            <div key={warning} className="mt-3 flex items-start gap-2 rounded-xl bg-[#FFFCF5] p-3 text-xs text-nexora-amber">
-              <AlertTriangle size={15} className="mt-0.5 shrink-0" /> {warning}
+          {scan.scan_report?.length > 0 && (
+            <div className="mt-4 rounded-2xl border border-nexora-border bg-[#FAFCFB] p-4">
+              <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-nexora-muted">What Nexora checked</p>
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                {scan.scan_report.map((step, index) => (
+                  <div key={`${step.stage}-${index}`} className="flex items-start gap-2 rounded-xl bg-white p-3 text-xs">
+                    <CheckCircle2 size={15} className={step.status === "ok" ? "mt-0.5 shrink-0 text-nexora-emerald" : "mt-0.5 shrink-0 text-nexora-muted"} />
+                    <div>
+                      <p className="font-bold text-nexora-ink">{step.stage}</p>
+                      <p className="mt-0.5 leading-5 text-nexora-muted">{step.detail}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          ))}
+          )}
+
+          {scan.warnings?.map((warning) => {
+            const message = warning.includes("Generic sites should expose schema.org Product JSON-LD")
+              ? "No importable products were found after the public scan. The store may keep its catalogue behind a private/unsupported API, require login, or block automated access."
+              : warning;
+            return (
+              <div key={warning} className="mt-3 flex items-start gap-2 rounded-xl bg-[#FFFCF5] p-3 text-xs text-nexora-amber">
+                <AlertTriangle size={15} className="mt-0.5 shrink-0" /> {message}
+              </div>
+            );
+          })}
 
           <div className="mt-4 max-h-[520px] divide-y divide-nexora-border overflow-y-auto rounded-xl border border-nexora-border">
             {scan.products.map((p) => (
@@ -235,6 +257,11 @@ export default function StoreImport() {
                 </div>
               </label>
             ))}
+            {!scan.products?.length && (
+              <div className="p-6 text-center text-sm text-nexora-muted">
+                No public product records could be extracted from this store.
+              </div>
+            )}
           </div>
         </section>
       )}

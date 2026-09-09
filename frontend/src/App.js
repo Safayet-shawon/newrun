@@ -47,6 +47,8 @@ import Orders from "@/pages/seller/Orders";
 import Customers from "@/pages/seller/Customers";
 import ReviewsPage from "@/pages/seller/ReviewsPage";
 import Analytics from "@/pages/seller/Analytics";
+import Intelligence from "@/pages/seller/Intelligence";
+import StoreImport from "@/pages/seller/StoreImport";
 import Settings from "@/pages/seller/Settings";
 import Notifications from "@/pages/seller/Notifications";
 
@@ -76,7 +78,6 @@ function AppRoutes() {
 
   return (
     <Routes>
-      {/* Customer marketplace */}
       <Route path="/" element={M(Home)} />
       <Route path="/products" element={M(ProductListing)} />
       <Route path="/category/:slug" element={M(ProductListing)} />
@@ -89,7 +90,6 @@ function AppRoutes() {
       <Route path="/wishlist" element={M(Wishlist)} />
       <Route path="/checkout" element={<RequireAuth><MarketplaceLayout><Checkout /></MarketplaceLayout></RequireAuth>} />
 
-      {/* Auth */}
       <Route path="/login" element={<Login />} />
       <Route path="/admin/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
@@ -98,7 +98,6 @@ function AppRoutes() {
       <Route path="/seller/signup" element={<SellerSignup />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
 
-      {/* Customer account */}
       <Route path="/account" element={<RequireAuth role="customer"><AccountLayout /></RequireAuth>}>
         <Route index element={<AccountOverview />} />
         <Route path="orders" element={<AccountOrders />} />
@@ -112,10 +111,8 @@ function AppRoutes() {
         <Route path="recently-viewed" element={<AccountRecent />} />
       </Route>
 
-      {/* Seller onboarding */}
       <Route path="/seller/onboarding" element={<RequireAuth role="seller"><Onboarding /></RequireAuth>} />
 
-      {/* Seller dashboard */}
       <Route path="/seller/dashboard" element={<RequireAuth role="seller"><SellerLayout /></RequireAuth>}>
         <Route index element={<Overview />} />
         <Route path="orders" element={<Orders />} />
@@ -129,11 +126,12 @@ function AppRoutes() {
         <Route path="customers" element={<Customers />} />
         <Route path="reviews" element={<ReviewsPage />} />
         <Route path="analytics" element={<Analytics />} />
+        <Route path="intelligence" element={<Intelligence />} />
+        <Route path="import-store" element={<StoreImport />} />
         <Route path="settings" element={<Settings />} />
         <Route path="notifications" element={<Notifications />} />
       </Route>
 
-      {/* Owner admin — Nexora structure */}
       <Route path="/admin/dashboard" element={<RequireAuth role="admin"><AdminLayout /></RequireAuth>}>
         <Route index element={<OwnerOverview />} />
         <Route path="sellers" element={<SellersSubscriptions />} />

@@ -47,9 +47,11 @@ app.include_router(admin.router, prefix="/api")
 app.include_router(subscription_tokens.router, prefix="/api")
 app.include_router(owner_admin.router, prefix="/api")
 app.include_router(seller_intelligence.router, prefix="/api")
-# Enhanced browser scan route comes before the legacy importer /scan route.
-app.include_router(browser_store_scanner.router, prefix="/api")
+# Social assisted-browser routes are registered first so /manual/start keeps
+# the exact URL path (important for Facebook Page and category/product URLs).
 app.include_router(social_store_scanner.router, prefix="/api")
+# Enhanced automatic /scan route comes before the legacy importer /scan route.
+app.include_router(browser_store_scanner.router, prefix="/api")
 app.include_router(import_ai.router, prefix="/api")
 app.include_router(store_importer.router, prefix="/api")
 

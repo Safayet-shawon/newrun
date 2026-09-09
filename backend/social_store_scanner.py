@@ -5,10 +5,13 @@ Nexora only reads what the seller can see in the temporary assisted browser.
 It never asks for Facebook credentials and never bypasses login/CAPTCHA.
 """
 import re
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 
+from db import new_id
 from security import require_role
 import browser_store_scanner as browser
 import store_importer
@@ -69,10 +72,7 @@ def _post_product(post):
     if not price or price <= 0:
         return None
     images = post.get("images") or []
-    if not images:
-        return None
-    # Price + image are strong signals; product-language increases confidence.
-    if len(text) < 8:
+    if not images or len(text) < 8:
         return None
     title = _title(text)
     if not title:
@@ -97,7 +97,6 @@ def _post_product(post):
 
 
 async def _facebook_posts(page):
-    # Load more posts without trying to evade any platform controls.
     for _ in range(8):
         try:
             await page.mouse.wheel(0, 1800)
@@ -108,6 +107,84 @@ async def _facebook_posts(page):
         return await page.evaluate(POSTS_SCRIPT)
     except Exception:
         return []
+
+
+class SocialStartBody(BaseModel):
+    url: str = Field(min_length=4, max_length=500)
+    confirm_rights: bool = False
+
+
+@router.post("/seller/import-store/social/manual/start")
+async def start_social(body: SocialStartBody, user: dict = Depends(seller_dep)):
+    await store_importer._require_import(user)
+    if not body.confirm_rights:
+        raise HTTPException(422, "Confirm ownership/permission before Facebook import")
+    await browser._cleanup_sessions()
+
+    raw = body.url.strip()
+    if not raw.startswith(("http://", "https://")):
+        raw = "https://" + raw
+    parsed = urlparse(raw)
+    if not parsed.hostname or "facebook.com" not in parsed.hostname.lower():
+        raise HTTPException(422, "Enter a Facebook Page URL")
+    universal._assert_public(raw)
+    origin = universal._origin(raw)
+
+    for session_id, session in list(browser._manual_sessions.items()):
+        if session.get("seller_id") == user["id"]:
+            await browser._close_session(session_id)
+
+    try:
+        from playwright.async_api import async_playwright
+    except Exception:
+        raise HTTPException(503, "Browser assistance is not installed. Run: py -m pip install -r requirements.txt")
+
+    pw = await async_playwright().start()
+    try:
+        try:
+            browser_instance = await pw.chromium.launch(channel="chrome", headless=False)
+        except Exception:
+            browser_instance = await pw.chromium.launch(headless=False)
+        context = await browser_instance.new_context()
+        await browser._install_async_route(context)
+        page = await context.new_page()
+        await browser._goto_async(page, raw)
+    except Exception as exc:
+        try:
+            await pw.stop()
+        except Exception:
+            pass
+        raise HTTPException(503, "Could not open Facebook in the assisted browser. Install Chrome/Chromium or run `py -m playwright install chromium`.") from exc
+
+    session_id = new_id("browser_")
+    browser._manual_sessions[session_id] = {
+        "seller_id": user["id"],
+        "origin": origin,
+        "source_url": raw,
+        "playwright": pw,
+        "browser": browser_instance,
+        "context": context,
+        "page": page,
+        "created_at": datetime.now(timezone.utc),
+    }
+
+    try:
+        html_text = await page.content()
+        body_text = await page.locator("body").inner_text(timeout=2500)
+    except Exception:
+        html_text, body_text = "", ""
+    challenge_type, challenge_message = browser._challenge_from(page.url, html_text, body_text)
+    return {
+        "session_id": session_id,
+        "status": "waiting_for_user",
+        "challenge_type": challenge_type or "facebook_navigation",
+        "message": challenge_message or (
+            "Facebook opened on your Page. If asked, log in or finish verification yourself. "
+            "Open the Page posts/photos/shop area and let products load, then return to Nexora and click Continue scan."
+        ),
+        "expires_in_minutes": browser.MANUAL_TTL_MINUTES,
+        "privacy_note": "Facebook credentials stay inside the temporary browser session and are discarded when it closes.",
+    }
 
 
 @router.post("/seller/import-store/social/manual/{session_id}/continue")
@@ -165,7 +242,7 @@ async def continue_social(session_id: str, user: dict = Depends(seller_dep)):
         }
 
     result = {
-        "website_url": session.get("origin"),
+        "website_url": session.get("source_url") or session.get("origin"),
         "platform": "facebook-page",
         "products": candidates,
         "manual_required": False,

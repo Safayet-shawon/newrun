@@ -19,6 +19,8 @@ import wallet
 import admin
 import subscription_tokens
 import owner_admin
+import seller_intelligence
+import store_importer
 import seed as seed_module
 import storage
 
@@ -35,6 +37,8 @@ app.include_router(wallet.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(subscription_tokens.router, prefix="/api")
 app.include_router(owner_admin.router, prefix="/api")
+app.include_router(seller_intelligence.router, prefix="/api")
+app.include_router(store_importer.router, prefix="/api")
 
 app.add_middleware(
     CORSMiddleware,
@@ -58,6 +62,7 @@ async def startup():
     try:
         await seed_module.ensure_indexes()
         await subscription_tokens.ensure_indexes()
+        await store_importer.ensure_indexes()
     except Exception as e:
         logger.error(f"Index setup: {e}")
     try:
@@ -70,9 +75,17 @@ async def startup():
         logger.info("Storage initialized")
     except Exception as e:
         logger.error(f"Storage init failed: {e}")
+    try:
+        store_importer.start_sync_worker()
+        logger.info("Store import sync worker started")
+    except Exception as e:
+        logger.error(f"Store import sync worker failed to start: {e}")
 
 
 @app.on_event("shutdown")
 async def shutdown():
-    from db import client
-    client.close()
+    try:
+        await store_importer.stop_sync_worker()
+    finally:
+        from db import client
+        client.close()

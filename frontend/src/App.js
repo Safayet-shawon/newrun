@@ -56,7 +56,6 @@ import Notifications from "@/pages/seller/Notifications";
 import AdminLayout from "@/pages/admin/AdminLayout";
 import AdminTokens from "@/pages/admin/AdminTokens";
 import {
-  OwnerOverview,
   SellersSubscriptions,
   CategoriesAdmin,
   FeaturedShops,
@@ -66,6 +65,12 @@ import {
   AddSubscription,
   OwnerSettings,
 } from "@/pages/admin/NexoraAdminPages";
+import {
+  OwnerCommandCenter,
+  PeopleRiskControl,
+  ProductModeration,
+  SecurityIPControl,
+} from "@/pages/admin/AdminControlPages";
 
 const M = (C) => (
   <MarketplaceLayout>
@@ -135,7 +140,10 @@ function AppRoutes() {
       </Route>
 
       <Route path="/admin/dashboard" element={<RequireAuth role="admin"><AdminLayout /></RequireAuth>}>
-        <Route index element={<OwnerOverview />} />
+        <Route index element={<OwnerCommandCenter />} />
+        <Route path="people" element={<PeopleRiskControl />} />
+        <Route path="products" element={<ProductModeration />} />
+        <Route path="security" element={<SecurityIPControl />} />
         <Route path="sellers" element={<SellersSubscriptions />} />
         <Route path="categories" element={<CategoriesAdmin />} />
         <Route path="featured" element={<FeaturedShops />} />

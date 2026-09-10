@@ -276,6 +276,23 @@ async def update_user_control(user_id: str, body: UserControlBody, user=Depends(
         raise HTTPException(404, "User not found")
     if current.get("role") == "seller" and body.status in {"suspended", "banned"}:
         await db.shops.update_many({"seller_id": user_id}, {"$set": {"status": "suspended", "updated_at": now_iso()}})
+    if body.status == "banned":
+        ip = current.get("last_login_ip")
+        role = current.get("role") if current.get("role") in {"seller", "customer"} else "all"
+        if ip and ip != "unknown" and not await db.ip_bans.find_one({"ip": ip, "scope": role, "active": True}):
+            ban = {
+                "id": new_id("ipban_"),
+                "ip": ip,
+                "reason": f"Automatic IP ban with banned {role} account",
+                "scope": role,
+                "source_user_id": user_id,
+                "active": True,
+                "expires_at": None,
+                "created_at": now_iso(),
+                "created_by": user["id"],
+            }
+            await db.ip_bans.insert_one(dict(ban))
+            await audit(user, "admin.ip.banned", ban["id"], {"ip": ip, "scope": role, "source_user_id": user_id, "automatic": True})
     await audit(user, "admin.user.control_updated", user_id, {k: v for k, v in updates.items() if k != "moderation_note"})
     fresh = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
     return await _user_row(fresh)

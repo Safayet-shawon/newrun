@@ -10,6 +10,7 @@ import MarketplaceLayout from "@/components/marketplace/MarketplaceLayout";
 import Home from "@/pages/Home";
 import ProductListing from "@/pages/ProductListing";
 import ProductDetail from "@/pages/ProductDetail";
+import VisualSearch from "@/pages/VisualSearch";
 import Shops from "@/pages/Shops";
 import Storefront from "@/pages/Storefront";
 import Cart from "@/pages/Cart";
@@ -82,6 +83,7 @@ function AppRoutes() {
       <Route path="/products" element={M(ProductListing)} />
       <Route path="/category/:slug" element={M(ProductListing)} />
       <Route path="/search" element={M(ProductListing)} />
+      <Route path="/visual-search" element={M(VisualSearch)} />
       <Route path="/deals" element={M(ProductListing)} />
       <Route path="/product/:id" element={M(ProductDetail)} />
       <Route path="/shops" element={M(Shops)} />

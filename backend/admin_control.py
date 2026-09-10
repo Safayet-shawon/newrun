@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -19,6 +18,74 @@ ProductAuthenticity = Literal["unreviewed", "authentic", "suspicious"]
 ShopStatus = Literal["draft", "published", "suspended"]
 ProductStatus = Literal["draft", "published", "archived"]
 BanScope = Literal["all", "customer", "seller"]
+
+DEFAULT_SITE_CONTENT = {
+    "id": "homepage",
+    "hero_badge": "Bangladesh's trusted multi-vendor marketplace",
+    "hero_line1": "Everything you love.",
+    "hero_line2": "From stores you can trust.",
+    "hero_subtitle": "Great products. Genuine shops. A better everyday.",
+    "featured_genders": [
+        {
+            "title": "MEN",
+            "subtitle": "Everyday style, footwear & essentials",
+            "to": "/products?category=fashion&q=men",
+            "image": "https://images.unsplash.com/photo-1617137968427-85924c800a22?auto=format&fit=crop&w=1100&q=88",
+            "tone": "from-[#BFE8EA]/25 via-[#F7FBFB]/5 to-[#0F766E]/25",
+            "accent": "bg-[#0F766E]",
+        },
+        {
+            "title": "WOMEN",
+            "subtitle": "Fashion, beauty & accessories",
+            "to": "/products?category=fashion&q=women",
+            "image": "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=1100&q=88",
+            "tone": "from-[#FFD7E1]/35 via-[#FFF7F9]/5 to-[#E35D86]/25",
+            "accent": "bg-[#D94B78]",
+        },
+    ],
+    "campaigns": [
+        {
+            "eyebrow": "FASHION WEEK",
+            "title": "Fresh looks from independent shops",
+            "text": "Discover new-season fashion, local labels and everyday essentials in one place.",
+            "cta": "Shop fashion",
+            "to": "/category/fashion",
+            "image": "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1600&q=88",
+            "bg": "from-[#DFF4EC] via-[#F5FCF9] to-[#E8F1FB]",
+            "is_active": True,
+        },
+        {
+            "eyebrow": "BEAUTY DAYS",
+            "title": "Glow-up picks, better prices",
+            "text": "Explore skincare, makeup and beauty favourites from marketplace sellers.",
+            "cta": "Explore beauty",
+            "to": "/category/beauty",
+            "image": "https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=1600&q=88",
+            "bg": "from-[#FFE9EF] via-[#FFF8FA] to-[#F0E9FF]",
+            "is_active": True,
+        },
+        {
+            "eyebrow": "TECH WEEKEND",
+            "title": "Popular tech, one marketplace",
+            "text": "Compare electronics and accessories from different shops without losing context.",
+            "cta": "Shop electronics",
+            "to": "/category/electronics",
+            "image": "https://images.unsplash.com/photo-1498049794561-7780e7231661?auto=format&fit=crop&w=1600&q=88",
+            "bg": "from-[#DCEBFA] via-[#F5F9FD] to-[#E9F7F1]",
+            "is_active": True,
+        },
+        {
+            "eyebrow": "DISCOVER SHOPS",
+            "title": "New sellers worth following",
+            "text": "Find hidden gems, local brands and new independent stores across Nexora.",
+            "cta": "Browse shops",
+            "to": "/shops",
+            "image": "https://images.unsplash.com/photo-1441984904996-e0b6ba687e04?auto=format&fit=crop&w=1600&q=88",
+            "bg": "from-[#FFF0D8] via-[#FFFAF2] to-[#E7F4ED]",
+            "is_active": True,
+        },
+    ],
+}
 
 
 class UserControlBody(BaseModel):
@@ -57,6 +124,75 @@ class IPBanBody(BaseModel):
     scope: BanScope = "all"
     expires_at: Optional[str] = None
     source_user_id: Optional[str] = None
+
+
+class FeaturedGenderBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title: str = Field(min_length=1, max_length=40)
+    subtitle: str = Field(default="", max_length=160)
+    to: str = Field(default="/products", max_length=500)
+    image: str = Field(default="", max_length=1200)
+    tone: str = Field(default="from-[#EAF2FB] to-[#E8F7F0]", max_length=200)
+    accent: str = Field(default="bg-[#0F766E]", max_length=100)
+
+
+class CampaignBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    eyebrow: str = Field(default="OFFER", max_length=60)
+    title: str = Field(min_length=1, max_length=140)
+    text: str = Field(default="", max_length=300)
+    cta: str = Field(default="Shop now", max_length=60)
+    to: str = Field(default="/products", max_length=500)
+    image: str = Field(default="", max_length=1200)
+    bg: str = Field(default="from-[#EAF2FB] via-white to-[#E8F7F0]", max_length=200)
+    is_active: bool = True
+
+
+class SiteContentBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    hero_badge: str = Field(default="", max_length=120)
+    hero_line1: str = Field(min_length=1, max_length=100)
+    hero_line2: str = Field(min_length=1, max_length=100)
+    hero_subtitle: str = Field(default="", max_length=180)
+    featured_genders: list[FeaturedGenderBody] = Field(min_length=1, max_length=4)
+    campaigns: list[CampaignBody] = Field(min_length=1, max_length=12)
+
+
+def _site_content_merge(stored: dict | None):
+    if not stored:
+        return DEFAULT_SITE_CONTENT
+    return {
+        **DEFAULT_SITE_CONTENT,
+        **stored,
+        "featured_genders": stored.get("featured_genders") or DEFAULT_SITE_CONTENT["featured_genders"],
+        "campaigns": stored.get("campaigns") or DEFAULT_SITE_CONTENT["campaigns"],
+    }
+
+
+@router.get("/site-content")
+async def public_site_content():
+    stored = await db.platform_content.find_one({"id": "homepage"}, {"_id": 0})
+    content = _site_content_merge(stored)
+    return {**content, "campaigns": [c for c in content.get("campaigns", []) if c.get("is_active", True)]}
+
+
+@router.get("/admin/control/site-content")
+async def admin_site_content(user=Depends(admin_dep)):
+    stored = await db.platform_content.find_one({"id": "homepage"}, {"_id": 0})
+    return _site_content_merge(stored)
+
+
+@router.put("/admin/control/site-content")
+async def update_site_content(body: SiteContentBody, user=Depends(admin_dep)):
+    data = body.model_dump()
+    data.update({"id": "homepage", "updated_at": now_iso(), "updated_by": user["id"]})
+    await db.platform_content.update_one(
+        {"id": "homepage"},
+        {"$set": data, "$setOnInsert": {"created_at": now_iso()}},
+        upsert=True,
+    )
+    await audit(user, "admin.site_content.updated", "homepage", {"campaign_count": len(data["campaigns"]), "featured_count": len(data["featured_genders"])})
+    return _site_content_merge(await db.platform_content.find_one({"id": "homepage"}, {"_id": 0}))
 
 
 async def _user_row(user: dict):
@@ -248,5 +384,6 @@ async def ensure_indexes():
         await db.users.create_index([("last_login_ip", 1)])
         await db.users.create_index([("risk_flag", 1), ("status", 1)])
         await db.products.create_index([("risk_flag", 1), ("authenticity_status", 1)])
+        await db.platform_content.create_index([("id", 1)], unique=True)
     except Exception:
         pass

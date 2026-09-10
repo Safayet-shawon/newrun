@@ -12,7 +12,6 @@ import {
   ShieldCheck,
   Sparkles,
   Star,
-  Store,
   Tag,
   TrendingUp,
   Truck,
@@ -21,15 +20,23 @@ import { api } from "@/lib/api";
 import ProductCard from "@/components/marketplace/ProductCard";
 import ShopCard from "@/components/marketplace/ShopCard";
 
-const CATEGORY_CARDS = [
-  { title: "Women Fashion", slug: "fashion", query: "women", image: "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=700&q=85" },
-  { title: "Men Footwear", slug: "fashion", query: "men shoes", image: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=700&q=85" },
-  { title: "Beauty & Skincare", slug: "beauty", image: "https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=700&q=85" },
-  { title: "Kids Clothing", slug: "fashion", query: "kids", image: "https://images.unsplash.com/photo-1519238263530-99bdd11df2ea?auto=format&fit=crop&w=700&q=85" },
-  { title: "Baby Accessories", slug: "fashion", query: "baby", image: "https://images.unsplash.com/photo-1519689680058-324335c77eba?auto=format&fit=crop&w=700&q=85" },
-  { title: "Home & Living", slug: "furniture", image: "https://images.unsplash.com/photo-1616137422495-1e9e46e2aa77?auto=format&fit=crop&w=700&q=85" },
-  { title: "Electronics", slug: "electronics", image: "https://images.unsplash.com/photo-1498049794561-7780e7231661?auto=format&fit=crop&w=700&q=85" },
-  { title: "Bags & Accessories", slug: "fashion", query: "bag", image: "https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=700&q=85" },
+const FALLBACK_CATEGORY_IMAGES = {
+  fashion: "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=700&q=85",
+  beauty: "https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=700&q=85",
+  electronics: "https://images.unsplash.com/photo-1498049794561-7780e7231661?auto=format&fit=crop&w=700&q=85",
+  furniture: "https://images.unsplash.com/photo-1616137422495-1e9e46e2aa77?auto=format&fit=crop&w=700&q=85",
+  grocery: "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=700&q=85",
+  jewellery: "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&w=700&q=85",
+  sports: "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&w=700&q=85",
+  books: "https://images.unsplash.com/photo-1495446815901-a7297e633e8d?auto=format&fit=crop&w=700&q=85",
+  pets: "https://images.unsplash.com/photo-1450778869180-41d0601e046e?auto=format&fit=crop&w=700&q=85",
+};
+
+const FALLBACK_CATEGORIES = [
+  { name: "Fashion", slug: "fashion", image_url: FALLBACK_CATEGORY_IMAGES.fashion },
+  { name: "Beauty", slug: "beauty", image_url: FALLBACK_CATEGORY_IMAGES.beauty },
+  { name: "Electronics", slug: "electronics", image_url: FALLBACK_CATEGORY_IMAGES.electronics },
+  { name: "Home & Living", slug: "furniture", image_url: FALLBACK_CATEGORY_IMAGES.furniture },
 ];
 
 const CATEGORY_TABS = [
@@ -51,7 +58,7 @@ const INTENTS = [
   { label: "Trending", text: "Popular right now", icon: TrendingUp, to: "/products?sort=popular", tone: "bg-[#E8F1FB] text-[#315C89]" },
 ];
 
-const FEATURED_GENDERS = [
+const DEFAULT_FEATURED_GENDERS = [
   {
     title: "MEN",
     subtitle: "Everyday style, footwear & essentials",
@@ -70,7 +77,7 @@ const FEATURED_GENDERS = [
   },
 ];
 
-const CAMPAIGNS = [
+const DEFAULT_CAMPAIGNS = [
   {
     eyebrow: "FASHION WEEK",
     title: "Fresh looks from independent shops",
@@ -97,15 +104,6 @@ const CAMPAIGNS = [
     to: "/category/electronics",
     image: "https://images.unsplash.com/photo-1498049794561-7780e7231661?auto=format&fit=crop&w=1600&q=88",
     bg: "from-[#DCEBFA] via-[#F5F9FD] to-[#E9F7F1]",
-  },
-  {
-    eyebrow: "DISCOVER SHOPS",
-    title: "New sellers worth following",
-    text: "Find hidden gems, local brands and new independent stores across Nexora.",
-    cta: "Browse shops",
-    to: "/shops",
-    image: "https://images.unsplash.com/photo-1441984904996-e0b6ba687e04?auto=format&fit=crop&w=1600&q=88",
-    bg: "from-[#FFF0D8] via-[#FFFAF2] to-[#E7F4ED]",
   },
 ];
 
@@ -166,18 +164,12 @@ function ProductRail({ items, emptyText = "More products will appear here as sel
 
   if (!list.length) return <div className="rounded-2xl border border-dashed border-nexora-border bg-white/80 px-5 py-8 text-sm text-nexora-muted">{emptyText}</div>;
 
-  return (
-    <>
-      <div ref={railRef} onScroll={(e) => setPage(Math.min(pages - 1, Math.max(0, Math.round(e.currentTarget.scrollLeft / Math.max(1, e.currentTarget.clientWidth)))))} className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 no-scrollbar touch-pan-x">
-        {list.map((product, index) => (
-          <div key={product.id} className="shrink-0 snap-start" style={{ width: `calc((100% - ${(perPage - 1) * 12}px) / ${perPage})` }}>
-            <ProductCard product={product} index={index} />
-          </div>
-        ))}
-      </div>
-      <RailControls page={page} pages={pages} onPage={go} onPrev={() => go(page - 1)} onNext={() => go(page + 1)} />
-    </>
-  );
+  return <>
+    <div ref={railRef} onScroll={(e) => setPage(Math.min(pages - 1, Math.max(0, Math.round(e.currentTarget.scrollLeft / Math.max(1, e.currentTarget.clientWidth)))))} className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 no-scrollbar touch-pan-x">
+      {list.map((product, index) => <div key={product.id} className="shrink-0 snap-start" style={{ width: `calc((100% - ${(perPage - 1) * 12}px) / ${perPage})` }}><ProductCard product={product} index={index} /></div>)}
+    </div>
+    <RailControls page={page} pages={pages} onPage={go} onPrev={() => go(page - 1)} onNext={() => go(page + 1)} />
+  </>;
 }
 
 function ShopRail({ shops }) {
@@ -190,51 +182,49 @@ function ShopRail({ shops }) {
     setPage(target);
     railRef.current?.scrollTo({ left: railRef.current.clientWidth * target, behavior: "smooth" });
   };
-
   if (!shops?.length) return <div className="rounded-2xl border border-dashed border-nexora-border bg-white/80 p-8 text-center text-sm text-nexora-muted">New shops will appear here.</div>;
-
-  return (
-    <>
-      <div ref={railRef} onScroll={(e) => setPage(Math.min(pages - 1, Math.max(0, Math.round(e.currentTarget.scrollLeft / Math.max(1, e.currentTarget.clientWidth)))))} className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 no-scrollbar touch-pan-x">
-        {shops.map((shop) => <div key={shop.id} className="shrink-0 snap-start" style={{ width: `calc((100% - ${(perPage - 1) * 12}px) / ${perPage})` }}><ShopCard shop={shop} /></div>)}
-      </div>
-      <RailControls page={page} pages={pages} onPage={go} onPrev={() => go(page - 1)} onNext={() => go(page + 1)} />
-    </>
-  );
+  return <>
+    <div ref={railRef} onScroll={(e) => setPage(Math.min(pages - 1, Math.max(0, Math.round(e.currentTarget.scrollLeft / Math.max(1, e.currentTarget.clientWidth)))))} className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 no-scrollbar touch-pan-x">
+      {shops.map((shop) => <div key={shop.id} className="shrink-0 snap-start" style={{ width: `calc((100% - ${(perPage - 1) * 12}px) / ${perPage})` }}><ShopCard shop={shop} /></div>)}
+    </div>
+    <RailControls page={page} pages={pages} onPage={go} onPrev={() => go(page - 1)} onNext={() => go(page + 1)} />
+  </>;
 }
 
-function CampaignCarousel() {
+function CampaignCarousel({ campaigns }) {
+  const list = campaigns || [];
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
+
+  useEffect(() => { setActive((a) => Math.min(a, Math.max(0, list.length - 1))); }, [list.length]);
   useEffect(() => {
-    if (paused) return undefined;
-    const id = setInterval(() => setActive((a) => (a + 1) % CAMPAIGNS.length), 4800);
+    if (paused || list.length <= 1) return undefined;
+    const id = setInterval(() => setActive((a) => (a + 1) % list.length), 4800);
     return () => clearInterval(id);
-  }, [paused]);
-  const campaign = CAMPAIGNS[active];
-  const move = (dir) => setActive((a) => (a + dir + CAMPAIGNS.length) % CAMPAIGNS.length);
+  }, [paused, list.length]);
+
+  if (!list.length) return null;
+  const campaign = list[active] || list[0];
+  const move = (dir) => setActive((a) => (a + dir + list.length) % list.length);
 
   return (
     <section className="mt-4" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
-      <div className={`relative overflow-hidden rounded-3xl border border-[#D6E1EC] bg-gradient-to-r ${campaign.bg} shadow-sm`}>
+      <div className={`relative overflow-hidden rounded-3xl border border-[#D6E1EC] bg-gradient-to-r ${campaign.bg || "from-[#EAF2FB] via-white to-[#E8F7F0]"} shadow-sm`}>
         <div className="grid min-h-[190px] items-stretch md:grid-cols-[1fr_1.1fr]">
           <div className="relative z-10 flex flex-col justify-center p-5 sm:p-7 lg:p-8">
             <span className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-nexora-emerald">{campaign.eyebrow}</span>
             <h2 className="mt-2 max-w-xl text-2xl font-extrabold text-nexora-ink sm:text-3xl">{campaign.title}</h2>
             <p className="mt-2 max-w-xl text-sm leading-6 text-nexora-muted">{campaign.text}</p>
-            <Link to={campaign.to} className="mt-4 inline-flex w-fit items-center gap-2 rounded-full bg-nexora-emerald px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-nexora-emeraldDark">{campaign.cta} <ArrowRight size={15} /></Link>
+            <Link to={campaign.to || "/products"} className="mt-4 inline-flex w-fit items-center gap-2 rounded-full bg-nexora-emerald px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-nexora-emeraldDark">{campaign.cta || "Shop now"} <ArrowRight size={15} /></Link>
           </div>
-          <Link to={campaign.to} className="relative min-h-[170px] overflow-hidden md:min-h-[190px]">
-            <img src={campaign.image} alt={campaign.title} className="absolute inset-0 h-full w-full object-cover" />
+          <Link to={campaign.to || "/products"} className="relative min-h-[170px] overflow-hidden md:min-h-[190px]">
+            {campaign.image ? <img src={campaign.image} alt={campaign.title} className="absolute inset-0 h-full w-full object-cover" /> : <div className="absolute inset-0 bg-gradient-to-br from-[#E8F7F0] to-[#EAF2FB]" />}
             <div className="absolute inset-0 bg-gradient-to-r from-white/35 via-transparent to-transparent" />
           </Link>
         </div>
-        <button onClick={() => move(-1)} className="absolute left-3 top-1/2 z-20 hidden h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-nexora-ink shadow-md backdrop-blur sm:grid" aria-label="Previous campaign"><ArrowLeft size={17} /></button>
-        <button onClick={() => move(1)} className="absolute right-3 top-1/2 z-20 hidden h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-nexora-ink shadow-md backdrop-blur sm:grid" aria-label="Next campaign"><ArrowRight size={17} /></button>
+        {list.length > 1 && <><button onClick={() => move(-1)} className="absolute left-3 top-1/2 z-20 hidden h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-nexora-ink shadow-md backdrop-blur sm:grid" aria-label="Previous campaign"><ArrowLeft size={17} /></button><button onClick={() => move(1)} className="absolute right-3 top-1/2 z-20 hidden h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-nexora-ink shadow-md backdrop-blur sm:grid" aria-label="Next campaign"><ArrowRight size={17} /></button></>}
       </div>
-      <div className="mt-2 flex items-center justify-center gap-2">
-        {CAMPAIGNS.map((item, index) => <button key={item.title} onClick={() => setActive(index)} className={`h-2 rounded-full transition-all ${index === active ? "w-8 bg-nexora-emerald" : "w-2 bg-[#C9D7E5]"}`} aria-label={`Show campaign ${index + 1}`} />)}
-      </div>
+      {list.length > 1 && <div className="mt-2 flex items-center justify-center gap-2">{list.map((item, index) => <button key={`${item.title}-${index}`} onClick={() => setActive(index)} className={`h-2 rounded-full transition-all ${index === active ? "w-8 bg-nexora-emerald" : "w-2 bg-[#C9D7E5]"}`} aria-label={`Show campaign ${index + 1}`} />)}</div>}
     </section>
   );
 }
@@ -261,6 +251,7 @@ function uniqueShops(items) {
 export default function Home() {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
+  const [siteContent, setSiteContent] = useState(null);
   const [query, setQuery] = useState("");
   const [error, setError] = useState(false);
   const [popularPool, setPopularPool] = useState([]);
@@ -274,17 +265,28 @@ export default function Home() {
       api.get("/products", { signal: controller.signal, timeout: 7000, params: { sort: "popular", limit: 48 } }),
       api.get("/products", { signal: controller.signal, timeout: 7000, params: { sort: "rating", limit: 48 } }),
       api.get("/shops", { signal: controller.signal, timeout: 7000, params: { limit: 12 } }),
-    ]).then(([homeResult, popularResult, ratingResult, shopsResult]) => {
+      api.get("/site-content", { signal: controller.signal, timeout: 7000 }),
+    ]).then(([homeResult, popularResult, ratingResult, shopsResult, contentResult]) => {
       if (homeResult.status === "fulfilled") setData(homeResult.value.data);
       else if (homeResult.reason?.code !== "ERR_CANCELED") setError(true);
       if (popularResult.status === "fulfilled") setPopularPool(popularResult.value.data?.items || []);
       if (ratingResult.status === "fulfilled") setRatingPool(ratingResult.value.data?.items || []);
       if (shopsResult.status === "fulfilled") setShopPool(shopsResult.value.data || []);
+      if (contentResult.status === "fulfilled") setSiteContent(contentResult.value.data || null);
     });
     return () => controller.abort();
   }, []);
 
   const categoryCounts = useMemo(() => Object.fromEntries((data?.categories || []).map((cat) => [cat.slug, cat.product_count || 0])), [data]);
+  const categoryCards = useMemo(() => {
+    const live = data?.categories || [];
+    const source = live.length ? live : FALLBACK_CATEGORIES;
+    return source.slice(0, 12).map((cat) => ({
+      title: cat.name || cat.title || cat.slug,
+      slug: cat.slug,
+      image: cat.image_url || cat.image || FALLBACK_CATEGORY_IMAGES[cat.slug] || FALLBACK_CATEGORY_IMAGES.fashion,
+    }));
+  }, [data]);
   const trending = useMemo(() => uniqueProducts([...(data?.trending || []), ...popularPool]).slice(0, 24), [data, popularPool]);
   const deals = useMemo(() => uniqueProducts([...(data?.deals || []), ...popularPool.filter((p) => p.discount_price != null)]).slice(0, 24), [data, popularPool]);
   const topRated = useMemo(() => uniqueProducts([...(data?.top_rated || []), ...ratingPool]).slice(0, 24), [data, ratingPool]);
@@ -294,6 +296,13 @@ export default function Home() {
     const inferred = [...trending, ...topRated].map((p) => p.brand).filter(Boolean);
     return [...new Set([...live, ...inferred])].slice(0, 18);
   }, [data, trending, topRated]);
+
+  const featuredGenders = siteContent?.featured_genders?.length ? siteContent.featured_genders : DEFAULT_FEATURED_GENDERS;
+  const campaigns = siteContent ? (siteContent.campaigns || []) : DEFAULT_CAMPAIGNS;
+  const heroBadge = siteContent?.hero_badge || "Bangladesh's trusted multi-vendor marketplace";
+  const heroLine1 = siteContent?.hero_line1 || "Everything you love.";
+  const heroLine2 = siteContent?.hero_line2 || "From stores you can trust.";
+  const heroSubtitle = siteContent?.hero_subtitle || "Great products. Genuine shops. A better everyday.";
 
   const submitHeroSearch = (event) => {
     event.preventDefault();
@@ -306,9 +315,9 @@ export default function Home() {
         <section className="overflow-hidden rounded-2xl border border-[#DCE7EF] bg-white shadow-sm sm:rounded-3xl">
           <div className="grid lg:grid-cols-[.88fr_1.12fr]">
             <div className="flex flex-col justify-center px-4 py-5 sm:px-7 sm:py-6 lg:px-8">
-              <span className="mb-2 inline-flex w-fit items-center rounded-full bg-[#E7F6EF] px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.12em] text-nexora-emeraldDark sm:text-[10px]">Bangladesh&apos;s trusted multi-vendor marketplace</span>
-              <h1 className="max-w-xl text-[30px] font-extrabold leading-[1.03] tracking-[-0.03em] text-nexora-ink sm:text-[42px] lg:text-[44px]">Everything you love.<br /><span className="text-nexora-emerald">From stores you can trust.</span></h1>
-              <p className="mt-2 text-sm text-nexora-muted">Great products. Genuine shops. A better everyday.</p>
+              <span className="mb-2 inline-flex w-fit items-center rounded-full bg-[#E7F6EF] px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.12em] text-nexora-emeraldDark sm:text-[10px]">{heroBadge}</span>
+              <h1 className="max-w-xl text-[30px] font-extrabold leading-[1.03] tracking-[-0.03em] text-nexora-ink sm:text-[42px] lg:text-[44px]">{heroLine1}<br /><span className="text-nexora-emerald">{heroLine2}</span></h1>
+              <p className="mt-2 text-sm text-nexora-muted">{heroSubtitle}</p>
               <form onSubmit={submitHeroSearch} className="mt-3 flex max-w-xl items-center rounded-xl border border-[#D9E5EE] bg-[#F8FBFD] p-1.5 md:hidden">
                 <Search size={16} className="ml-2 shrink-0 text-nexora-muted" />
                 <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search products, shops or brands..." className="min-w-0 flex-1 bg-transparent px-2 text-sm outline-none" />
@@ -323,16 +332,13 @@ export default function Home() {
             </div>
 
             <div className="border-t border-[#DCE7EF] bg-gradient-to-br from-[#EAF2FB] via-[#F7FBFE] to-[#EEF8F3] p-3 sm:p-4 lg:border-l lg:border-t-0">
-              <div className="grid grid-cols-2 gap-3">
-                {FEATURED_GENDERS.map((item) => (
-                  <Link key={item.title} to={item.to} className="group relative min-h-[180px] overflow-hidden rounded-2xl bg-white shadow-sm sm:min-h-[238px] sm:rounded-3xl">
-                    <img src={item.image} alt={`${item.title} collection`} className="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-105" />
-                    <div className={`absolute inset-0 bg-gradient-to-t ${item.tone}`} />
+              <div className={`grid gap-3 ${featuredGenders.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+                {featuredGenders.map((item, index) => (
+                  <Link key={`${item.title}-${index}`} to={item.to || "/products"} className="group relative min-h-[180px] overflow-hidden rounded-2xl bg-white shadow-sm sm:min-h-[238px] sm:rounded-3xl">
+                    {item.image ? <img src={item.image} alt={`${item.title} collection`} className="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-105" /> : <div className="absolute inset-0 bg-gradient-to-br from-[#E8F7F0] to-[#EAF2FB]" />}
+                    <div className={`absolute inset-0 bg-gradient-to-t ${item.tone || "from-[#0F766E]/25 via-transparent to-transparent"}`} />
                     <div className="absolute inset-x-3 bottom-3 rounded-2xl bg-white/92 p-3 shadow-sm backdrop-blur sm:inset-x-4 sm:bottom-4 sm:p-4">
-                      <div className="flex items-center justify-between gap-2">
-                        <div><span className="text-[9px] font-black tracking-[0.22em] text-nexora-muted">SIGNATURE</span><h2 className="text-xl font-black tracking-tight text-nexora-ink sm:text-2xl">{item.title}</h2></div>
-                        <span className={`grid h-9 w-9 place-items-center rounded-full text-white ${item.accent}`}><ArrowRight size={16} /></span>
-                      </div>
+                      <div className="flex items-center justify-between gap-2"><div><span className="text-[9px] font-black tracking-[0.22em] text-nexora-muted">SIGNATURE</span><h2 className="text-xl font-black tracking-tight text-nexora-ink sm:text-2xl">{item.title}</h2></div><span className={`grid h-9 w-9 place-items-center rounded-full text-white ${item.accent || "bg-[#0F766E]"}`}><ArrowRight size={16} /></span></div>
                       <p className="mt-1 hidden text-[11px] text-nexora-muted sm:block">{item.subtitle}</p>
                     </div>
                   </Link>
@@ -344,19 +350,11 @@ export default function Home() {
 
         <section className="mt-4 rounded-3xl border border-[#DCE7EF] bg-white p-4 shadow-sm sm:p-5">
           <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex min-w-0 items-center gap-4 overflow-x-auto no-scrollbar">
-              <h2 className="shrink-0 text-xl font-extrabold text-nexora-ink">Shop by Category</h2>
-              <div className="flex shrink-0 gap-1">{CATEGORY_TABS.map(([label, to], index) => <Link key={label} to={to} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${index === 0 ? "bg-[#E8F5EF] text-nexora-emeraldDark" : "text-nexora-muted hover:bg-[#E8F1FB] hover:text-[#315C89]"}`}>{label}</Link>)}</div>
-            </div>
+            <div className="flex min-w-0 items-center gap-4 overflow-x-auto no-scrollbar"><h2 className="shrink-0 text-xl font-extrabold text-nexora-ink">Shop by Category</h2><div className="flex shrink-0 gap-1">{CATEGORY_TABS.map(([label, to], index) => <Link key={label} to={to} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${index === 0 ? "bg-[#E8F5EF] text-nexora-emeraldDark" : "text-nexora-muted hover:bg-[#E8F1FB] hover:text-[#315C89]"}`}>{label}</Link>)}</div></div>
             <Link to="/products" className="hidden shrink-0 items-center gap-1 text-xs font-bold text-nexora-emerald sm:inline-flex">See all categories <ArrowRight size={13} /></Link>
           </div>
           <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 no-scrollbar touch-pan-x">
-            {CATEGORY_CARDS.map((card) => {
-              const qs = new URLSearchParams();
-              if (card.slug) qs.set("category", card.slug);
-              if (card.query) qs.set("q", card.query);
-              return <Link key={card.title} to={`/products?${qs.toString()}`} className="group min-w-[145px] snap-start overflow-hidden rounded-2xl border border-[#DCE7EF] bg-white transition hover:-translate-y-0.5 hover:border-[#B9D7C9] hover:shadow-md sm:min-w-[175px] lg:flex-1"><div className="h-[100px] overflow-hidden bg-nexora-mintbg sm:h-[110px]"><img src={card.image} alt={card.title} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" /></div><div className="p-3"><b className="block text-sm text-nexora-ink">{card.title}</b><span className="mt-1 block text-[11px] text-nexora-muted">{categoryCounts[card.slug] ? `${categoryCounts[card.slug]}+ products` : "Explore products"}</span></div></Link>;
-            })}
+            {categoryCards.map((card) => <Link key={card.slug} to={`/category/${card.slug}`} className="group min-w-[145px] snap-start overflow-hidden rounded-2xl border border-[#DCE7EF] bg-white transition hover:-translate-y-0.5 hover:border-[#B9D7C9] hover:shadow-md sm:min-w-[175px]"><div className="h-[100px] overflow-hidden bg-nexora-mintbg sm:h-[110px]"><img src={card.image} alt={card.title} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" /></div><div className="p-3"><b className="block text-sm text-nexora-ink">{card.title}</b><span className="mt-1 block text-[11px] text-nexora-muted">{categoryCounts[card.slug] ? `${categoryCounts[card.slug]}+ products` : "Explore products"}</span></div></Link>)}
           </div>
         </section>
 
@@ -365,39 +363,18 @@ export default function Home() {
           {brands.length ? <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1 no-scrollbar touch-pan-x">{brands.map((brand) => <Link key={brand} to={`/products?brand=${encodeURIComponent(brand)}`} className="min-w-[132px] snap-start rounded-2xl border border-white/80 bg-white/90 px-5 py-4 text-center text-sm font-extrabold text-[#284B6B] shadow-sm transition hover:-translate-y-0.5 hover:border-[#9DBBD4] hover:bg-white">{brand}</Link>)}</div> : <div className="rounded-2xl border border-dashed border-[#BCD0E2] bg-white/65 p-5 text-sm text-[#55718B]">Brand names will appear automatically as sellers publish branded products.</div>}
         </section>
 
-        <CampaignCarousel />
+        <CampaignCarousel campaigns={campaigns} />
 
-        <section className="mt-5 rounded-3xl border border-[#E2DCEF] bg-[#F6F2FB] p-4 sm:p-5">
-          <SectionTitle title="Shop by Intent" subtitle="Find what you want without digging through menus" />
-          <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1 no-scrollbar touch-pan-x">{INTENTS.map(({ label, text, icon: Icon, to, tone }) => <Link key={label} to={to} className="flex min-w-[190px] snap-start items-center gap-3 rounded-2xl border border-white/80 bg-white/90 p-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"><span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${tone}`}><Icon size={18} /></span><span className="min-w-0"><b className="block truncate text-xs text-nexora-ink">{label}</b><small className="mt-0.5 block truncate text-[10px] text-nexora-muted">{text}</small></span></Link>)}</div>
-        </section>
+        <section className="mt-5 rounded-3xl border border-[#E2DCEF] bg-[#F6F2FB] p-4 sm:p-5"><SectionTitle title="Shop by Intent" subtitle="Find what you want without digging through menus" /><div className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1 no-scrollbar touch-pan-x">{INTENTS.map(({ label, text, icon: Icon, to, tone }) => <Link key={label} to={to} className="flex min-w-[190px] snap-start items-center gap-3 rounded-2xl border border-white/80 bg-white/90 p-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"><span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${tone}`}><Icon size={18} /></span><span className="min-w-0"><b className="block truncate text-xs text-nexora-ink">{label}</b><small className="mt-0.5 block truncate text-[10px] text-nexora-muted">{text}</small></span></Link>)}</div></section>
 
         {error && <div className="mt-4 rounded-2xl border border-[#F6D5C9] bg-[#FFF7F3] px-4 py-3 text-sm text-nexora-coral">Some live marketplace sections could not load. You can still browse the catalogue.</div>}
 
-        <section className="mt-6 rounded-3xl border border-[#D5E4F1] bg-[#F7FBFE] p-4 sm:p-5">
-          <SectionTitle title="Trending Now" subtitle="Swipe, drag or use the page controls to keep browsing" to="/products?sort=popular" />
-          <ProductRail items={trending} emptyText="Trending products will appear as the marketplace grows." />
-        </section>
+        <section className="mt-6 rounded-3xl border border-[#D5E4F1] bg-[#F7FBFE] p-4 sm:p-5"><SectionTitle title="Trending Now" subtitle="Swipe, drag or use the page controls to keep browsing" to="/products?sort=popular" /><ProductRail items={trending} emptyText="Trending products will appear as the marketplace grows." /></section>
+        <section className="mt-6 rounded-3xl border border-[#D6EBDD] bg-[#EFF9F3] p-4 sm:p-5"><SectionTitle title="Shops You’ll Love" subtitle="Independent stores worth discovering" to="/shops" /><ShopRail shops={featuredShops} /></section>
+        <section className="mt-6 rounded-3xl border border-[#F2DEC9] bg-[#FFF8ED] p-4 sm:p-5"><SectionTitle title="Best Deals" subtitle="More products, less dead space — browse page by page" to="/deals" /><ProductRail items={deals} emptyText="Active deals will appear here when sellers add discounts." /></section>
+        <section className="mt-6 rounded-3xl border border-[#DED8EF] bg-[#F8F5FD] p-4 sm:p-5"><SectionTitle title="Top Rated" subtitle="Customer favourites across the marketplace" to="/products?sort=rating" /><ProductRail items={topRated} emptyText="Top-rated products will appear once more shoppers leave reviews." /></section>
 
-        <section className="mt-6 rounded-3xl border border-[#D6EBDD] bg-[#EFF9F3] p-4 sm:p-5">
-          <SectionTitle title="Shops You’ll Love" subtitle="Independent stores worth discovering" to="/shops" />
-          <ShopRail shops={featuredShops} />
-        </section>
-
-        <section className="mt-6 rounded-3xl border border-[#F2DEC9] bg-[#FFF8ED] p-4 sm:p-5">
-          <SectionTitle title="Best Deals" subtitle="More products, less dead space — browse page by page" to="/deals" />
-          <ProductRail items={deals} emptyText="Active deals will appear here when sellers add discounts." />
-        </section>
-
-        <section className="mt-6 rounded-3xl border border-[#DED8EF] bg-[#F8F5FD] p-4 sm:p-5">
-          <SectionTitle title="Top Rated" subtitle="Customer favourites across the marketplace" to="/products?sort=rating" />
-          <ProductRail items={topRated} emptyText="Top-rated products will appear once more shoppers leave reviews." />
-        </section>
-
-        <section className="my-8 grid gap-5 overflow-hidden rounded-3xl border border-[#CDEFE2] bg-gradient-to-r from-[#E9F8F1] via-[#F7FCF9] to-[#EAF2FB] p-6 shadow-sm sm:p-8 lg:grid-cols-[1fr_auto] lg:items-center">
-          <div><span className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-nexora-emerald">Build with Nexora</span><h2 className="mt-1 text-2xl font-extrabold text-nexora-ink sm:text-3xl">Your shop. Your identity. One trusted marketplace.</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-nexora-muted">Create a storefront, publish products and reach shoppers across Bangladesh without losing your own brand identity.</p></div>
-          <div className="flex flex-wrap gap-2"><Link to="/seller/signup" className="nx-btn-primary">Become a Seller <ArrowRight size={15} /></Link><Link to="/shops" className="nx-btn-ghost">Discover Shops</Link></div>
-        </section>
+        <section className="my-8 grid gap-5 overflow-hidden rounded-3xl border border-[#CDEFE2] bg-gradient-to-r from-[#E9F8F1] via-[#F7FCF9] to-[#EAF2FB] p-6 shadow-sm sm:p-8 lg:grid-cols-[1fr_auto] lg:items-center"><div><span className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-nexora-emerald">Build with Nexora</span><h2 className="mt-1 text-2xl font-extrabold text-nexora-ink sm:text-3xl">Your shop. Your identity. One trusted marketplace.</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-nexora-muted">Create a storefront, publish products and reach shoppers across Bangladesh without losing your own brand identity.</p></div><div className="flex flex-wrap gap-2"><Link to="/seller/signup" className="nx-btn-primary">Become a Seller <ArrowRight size={15} /></Link><Link to="/shops" className="nx-btn-ghost">Discover Shops</Link></div></section>
       </div>
     </div>
   );

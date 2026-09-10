@@ -12,6 +12,7 @@ from starlette.middleware.cors import CORSMiddleware
 from db import db
 import auth
 import catalog
+import smart_search
 import seller
 import commerce
 import orders
@@ -42,6 +43,7 @@ app = FastAPI(title="NEXORA API")
 
 app.include_router(auth.router, prefix="/api")
 app.include_router(catalog.router, prefix="/api")
+app.include_router(smart_search.router, prefix="/api")
 app.include_router(seller.router, prefix="/api")
 app.include_router(commerce.router, prefix="/api")
 app.include_router(orders.router, prefix="/api")

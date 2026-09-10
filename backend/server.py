@@ -18,6 +18,7 @@ import commerce
 import orders
 import wallet
 import admin
+import admin_control
 import subscription_tokens
 import owner_admin
 import seller_intelligence_v2
@@ -49,6 +50,7 @@ app.include_router(commerce.router, prefix="/api")
 app.include_router(orders.router, prefix="/api")
 app.include_router(wallet.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
+app.include_router(admin_control.router, prefix="/api")
 app.include_router(subscription_tokens.router, prefix="/api")
 app.include_router(owner_admin.router, prefix="/api")
 app.include_router(seller_intelligence_v2.router, prefix="/api")
@@ -90,6 +92,7 @@ async def startup():
         await subscription_tokens.ensure_indexes()
         await store_importer.ensure_indexes()
         await import_ai_v2.ensure_import_categories()
+        await admin_control.ensure_indexes()
     except Exception as e:
         logger.error(f"Index/category setup: {e}")
 

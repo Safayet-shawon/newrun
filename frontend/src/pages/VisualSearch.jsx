@@ -1,6 +1,6 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Camera, ImageSearch, Search } from "lucide-react";
+import { Camera, Images, Search } from "lucide-react";
 import ProductCard from "@/components/marketplace/ProductCard";
 import { EmptyState, SectionHeader } from "@/components/shared/Bits";
 
@@ -14,7 +14,7 @@ export default function VisualSearch() {
       <div className="overflow-hidden rounded-3xl border border-[#D5E2ED] bg-gradient-to-r from-[#EAF2FB] via-white to-[#E8F7F0] p-5 shadow-sm sm:p-7">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
           <div className="grid h-24 w-24 shrink-0 place-items-center overflow-hidden rounded-2xl border border-white bg-white shadow-sm sm:h-28 sm:w-28">
-            {state.preview ? <img src={state.preview} alt="Uploaded search" className="h-full w-full object-cover" /> : <ImageSearch size={30} className="text-[#5E7890]" />}
+            {state.preview ? <img src={state.preview} alt="Uploaded search" className="h-full w-full object-cover" /> : <Images size={30} className="text-[#5E7890]" />}
           </div>
           <div className="min-w-0 flex-1">
             <SectionHeader eyebrow="Visual search" title="Products that look similar" />

@@ -67,6 +67,7 @@ import {
 } from "@/pages/admin/NexoraAdminPages";
 import {
   OwnerCommandCenter,
+  SiteContentControl,
   PeopleRiskControl,
   ProductModeration,
   SecurityIPControl,
@@ -143,10 +144,11 @@ function AppRoutes() {
         <Route index element={<OwnerCommandCenter />} />
         <Route path="people" element={<PeopleRiskControl />} />
         <Route path="products" element={<ProductModeration />} />
+        <Route path="categories" element={<CategoriesAdmin />} />
+        <Route path="content" element={<SiteContentControl />} />
+        <Route path="featured" element={<FeaturedShops />} />
         <Route path="security" element={<SecurityIPControl />} />
         <Route path="sellers" element={<SellersSubscriptions />} />
-        <Route path="categories" element={<CategoriesAdmin />} />
-        <Route path="featured" element={<FeaturedShops />} />
         <Route path="revenue" element={<RevenueCommission />} />
         <Route path="buyers" element={<BuyersCustomers />} />
         <Route path="pending" element={<PendingConfirmations />} />

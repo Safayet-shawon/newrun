@@ -3,149 +3,111 @@
 @tailwind utilities;
 
 :root {
-    --nexora-emerald: #6a4fd6;
-    --radius: 0.85rem;
+  --nexora-emerald: #0F8A68;
+  --nexora-emerald-dark: #086449;
+  --nexora-mint: #2DD4BF;
+  --nexora-mint-bg: #ECFDF5;
+  --nexora-warm: #FBFCFA;
+  --nexora-ink: #17211B;
+  --nexora-muted: #66736B;
+  --nexora-border: #E7EEE9;
+  --radius: 1rem;
 }
 
 * {
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  box-sizing: border-box;
 }
 
-html {
-    scroll-behavior: smooth;
-}
+html { scroll-behavior: smooth; }
 
 body {
-    margin: 0;
-    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-    background-color: #fbfbfa;
-    color: #1e1b2e;
+  margin: 0;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #FBFCFA;
+  color: #17211B;
 }
 
-::selection {
-    background: #6a4fd6;
-    color: #fff;
-}
+button, input, select, textarea { font: inherit; }
+a { text-underline-offset: 3px; }
 
-/* Slim premium scrollbar */
+::selection { background: #0F8A68; color: #fff; }
+
 ::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-track { background: #f2eff7; }
-::-webkit-scrollbar-thumb { background: #d9cff2; border-radius: 999px; border: 2px solid #f2eff7; }
-::-webkit-scrollbar-thumb:hover { background: #6a4fd6; }
+::-webkit-scrollbar-track { background: #F2F7F4; }
+::-webkit-scrollbar-thumb { background: #CFE1D8; border-radius: 999px; border: 2px solid #F2F7F4; }
+::-webkit-scrollbar-thumb:hover { background: #0F8A68; }
 
 @layer base {
-    :root {
-        --background: 40 100% 98%;
-        --foreground: 249 26% 14%;
-        --card: 0 0% 100%;
-        --card-foreground: 249 26% 14%;
-        --popover: 0 0% 100%;
-        --popover-foreground: 249 26% 14%;
-        --primary: 252 62% 57%;
-        --primary-foreground: 0 0% 100%;
-        --secondary: 262 33% 96%;
-        --secondary-foreground: 249 26% 14%;
-        --muted: 262 33% 96%;
-        --muted-foreground: 249 8% 45%;
-        --accent: 259 76% 76%;
-        --accent-foreground: 249 26% 14%;
-        --destructive: 0 84% 60%;
-        --destructive-foreground: 0 0% 100%;
-        --border: 251 24% 91%;
-        --input: 251 24% 91%;
-        --ring: 252 62% 57%;
-        --radius: 0.85rem;
-    }
-}
+  :root {
+    --background: 120 14% 99%;
+    --foreground: 145 18% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 145 18% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 145 18% 11%;
+    --primary: 160 80% 30%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 151 70% 96%;
+    --secondary-foreground: 145 18% 11%;
+    --muted: 150 22% 96%;
+    --muted-foreground: 145 8% 43%;
+    --accent: 172 66% 50%;
+    --accent-foreground: 145 18% 11%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 145 18% 92%;
+    --input: 145 18% 92%;
+    --ring: 160 80% 30%;
+    --radius: 1rem;
+  }
 
-@layer base {
-    * {
-        @apply border-border;
-    }
+  * { @apply border-border; }
 }
 
 .nx-card {
-    @apply bg-white border border-nexora-border rounded-2xl shadow-sm transition-shadow duration-200;
+  @apply rounded-2xl border border-nexora-border bg-white shadow-sm transition-all duration-200;
 }
+.nx-card:hover { box-shadow: 0 18px 40px rgba(23,33,27,.07); }
+
 .nx-container {
-    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  @apply mx-auto w-full max-w-[1500px] px-4 sm:px-6 lg:px-8;
 }
+
 .nx-btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-full bg-nexora-emerald px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-nexora-emeraldDark focus:outline-none focus:ring-2 focus:ring-nexora-emerald focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+  @apply inline-flex items-center justify-center gap-2 rounded-xl bg-nexora-emerald px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-nexora-emeraldDark focus:outline-none focus:ring-2 focus:ring-nexora-emerald focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
 }
+
 .nx-btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-full border border-nexora-border bg-white px-5 py-2.5 text-sm font-semibold text-nexora-ink transition-all duration-200 hover:border-nexora-emerald hover:text-nexora-emerald focus:outline-none;
+  @apply inline-flex items-center justify-center gap-2 rounded-xl border border-nexora-border bg-white px-5 py-2.5 text-sm font-semibold text-nexora-ink transition-all duration-200 hover:border-nexora-emerald hover:bg-nexora-mintbg hover:text-nexora-emeraldDark focus:outline-none;
 }
+
+.nx-page-shell {
+  @apply min-h-[65vh] bg-nexora-warm;
+}
+
+.nx-soft-panel {
+  background: linear-gradient(135deg, #FFFFFF 0%, #F8FFFB 58%, #ECFDF5 100%);
+}
+
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* NEXORA reference-dashboard sizing */
-.nx-dashboard-hero { height: 250px; }
-.nx-category-strip { height: 92px; }
-.nx-category-icon { width: 52px; height: 52px; }
-.nx-promo-card { height: 126px; }
-.nx-compact-product-image { height: 118px; }
-.nx-trust-strip { min-height: 54px; }
-
-.nx-desktop-sidebar {
-    scrollbar-width: none;
-}
-.nx-desktop-sidebar::-webkit-scrollbar { display: none; }
-
-@media (max-width: 1279px) {
-    .nx-dashboard-hero { height: 270px; }
-    .nx-category-strip { height: 98px; }
-    .nx-promo-card { height: 132px; }
-    .nx-compact-product-image { height: 150px; }
+.App :focus-visible {
+  outline: 2px solid #0F8A68;
+  outline-offset: 3px;
 }
 
-@media (max-width: 767px) {
-    .nx-dashboard { padding-top: 10px; }
-    .nx-dashboard-hero { height: 285px; }
-    .nx-category-strip { height: 94px; border-radius: 14px; }
-    .nx-category-icon { width: 50px; height: 50px; }
-    .nx-promo-card { height: 126px; }
-    .nx-compact-product-image { height: 150px; }
-}
+h1, h2, h3 { font-family: "Playfair Display", Georgia, serif; }
 
-/* Keep the full dashboard reference visible on common laptop screens. */
-@media (min-width: 1280px) and (max-height: 950px) {
-    .nx-dashboard { padding-top: 6px; padding-bottom: 6px; }
-    .nx-dashboard-hero { height: 190px; }
-    .nx-category-strip { height: 72px; margin-top: 6px; }
-    .nx-category-icon { width: 42px; height: 42px; }
-    .nx-category-strip b { margin-top: 2px; font-size: 8px; }
-    .nx-category-strip span { font-size: 7px; }
-    .nx-promo-grid { margin-top: 6px; }
-    .nx-promo-card { height: 92px; }
-    .nx-promo-card h3 { font-size: 15px; }
-    .nx-promo-card p { margin-top: 1px; }
-    .nx-promo-card a { margin-top: 5px; padding-top: 4px; padding-bottom: 4px; }
-    .nx-section-title { margin-top: 6px; }
-    .nx-section-title h2 { font-size: 13px; }
-    .nx-compact-shop { min-height: 54px; padding-top: 5px; padding-bottom: 5px; }
-    .nx-compact-shop img { width: 36px; height: 36px; }
-    .nx-compact-product-image { height: 82px; }
-    .nx-compact-product > div:last-child { padding-top: 5px; padding-bottom: 5px; }
-    .nx-trust-strip { min-height: 42px; margin-top: 6px; }
-    .nx-trust-strip > div > div:first-child { width: 28px; height: 28px; }
-}
+/* Keep seller surfaces consistent while still allowing admin-controlled seller themes. */
+[data-seller-dashboard] .rounded-2xl,
+[data-seller-dashboard] .rounded-xl { border-radius: var(--seller-radius, 14px); }
 
-@media (min-width: 1536px) and (min-height: 1000px) {
-    .nx-dashboard-hero { height: 252px; }
-    .nx-category-strip { height: 100px; }
-    .nx-category-icon { width: 56px; height: 56px; }
-    .nx-promo-card { height: 132px; }
-    .nx-compact-product-image { height: 126px; }
-}
+[data-seller-dashboard] main,
+[data-seller-dashboard] header { color: var(--nexora-ink); }
 
 @layer base {
-    [data-debug-wrapper="true"] { display: contents !important; }
+  [data-debug-wrapper="true"] { display: contents !important; }
 }
-
-h1,h2,h3{font-family:"Playfair Display",Georgia,serif} .nx-btn-primary,.nx-btn-ghost{border-radius:5px} .nx-card{border-radius:8px} .nx-container{max-width:1240px} .App :focus-visible{outline:2px solid #6a4fd6;outline-offset:3px}
-.nx-container{max-width:none;width:100%}
-/* Admin-controlled seller dashboard shape. */
-[data-seller-dashboard] .rounded-2xl,[data-seller-dashboard] .rounded-xl{border-radius:var(--seller-radius,12px)}

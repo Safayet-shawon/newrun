@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Ban,
@@ -16,7 +16,7 @@ import { Link } from "react-router-dom";
 import { Loader } from "@/components/shared/Bits";
 import { api, formatApiError, resolveImage } from "@/lib/api";
 import { toast } from "sonner";
-import { Card, Header, Empty, useGet, inputClass, money, dateText } from "./OwnerShared";
+import { Header, Empty, useGet, inputClass, money, dateText } from "./OwnerShared";
 
 const USER_STATUSES = ["active", "inactive", "suspended", "banned"];
 const TRUST = ["none", "verified", "authentic"];
@@ -69,7 +69,7 @@ export function OwnerCommandCenter() {
   if (!data) return <Loader label="Loading owner command center" />;
   const m = data.metrics || {};
   return <>
-    <Header title="Owner Command Center">High-priority control over people, shops, products, trust, risk and platform security.</Header>
+    <Header title="Owner Command Center">High-priority control over people, shops, products, trust, risk, marketplace visuals and platform security.</Header>
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-6">
       <Stat icon={Store} label="Sellers" value={m.sellers} />
       <Stat icon={Users} label="Customers" value={m.customers} tone="sky" />
@@ -86,11 +86,64 @@ export function OwnerCommandCenter() {
           <Link to="/admin/dashboard/people" className="rounded-2xl border border-slate-200 p-4 hover:border-teal-300 hover:bg-teal-50/40"><div className="flex items-center gap-2 font-bold text-slate-800"><Users size={17} className="text-teal-700" /> People & Access</div><p className="mt-1 text-xs leading-5 text-slate-500">Activate, suspend, ban, verify, mark authentic, red-flag and inspect last login IP.</p></Link>
           <Link to="/admin/dashboard/products" className="rounded-2xl border border-slate-200 p-4 hover:border-teal-300 hover:bg-teal-50/40"><div className="flex items-center gap-2 font-bold text-slate-800"><Package size={17} className="text-teal-700" /> Product Moderation</div><p className="mt-1 text-xs leading-5 text-slate-500">Publish/archive, authenticity review, red flags and primary product image control.</p></Link>
           <Link to="/admin/dashboard/categories" className="rounded-2xl border border-slate-200 p-4 hover:border-teal-300 hover:bg-teal-50/40"><div className="flex items-center gap-2 font-bold text-slate-800"><Image size={17} className="text-teal-700" /> Categories & Images</div><p className="mt-1 text-xs leading-5 text-slate-500">Change every category image and hide/show categories without deleting catalogue data.</p></Link>
+          <Link to="/admin/dashboard/content" className="rounded-2xl border border-sky-200 p-4 hover:bg-sky-50/50"><div className="flex items-center gap-2 font-bold text-slate-800"><Image size={17} className="text-sky-600" /> Site Content & Covers</div><p className="mt-1 text-xs leading-5 text-slate-500">Control homepage hero copy, Men/Women covers and every featured offer banner.</p></Link>
           <Link to="/admin/dashboard/security" className="rounded-2xl border border-rose-200 p-4 hover:bg-rose-50/50"><div className="flex items-center gap-2 font-bold text-slate-800"><ShieldCheck size={17} className="text-rose-600" /> Security & IP bans</div><p className="mt-1 text-xs leading-5 text-slate-500">Review login history, IP addresses and network-level blocks.</p></Link>
         </div>
       </section>
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h2 className="font-extrabold text-slate-800">Recent login/security activity</h2><div className="mt-3 divide-y divide-slate-100">{(data.recent_security_events || []).map((e) => <div key={e.id} className="py-3 text-xs"><div className="flex items-center justify-between gap-3"><b className="truncate text-slate-700">{e.email || e.event}</b><span className={e.success ? "text-emerald-600" : "text-rose-600"}>{e.success ? "Success" : "Failed"}</span></div><div className="mt-1 flex justify-between gap-3 text-slate-400"><span>{e.ip || "—"}</span><span>{dateText(e.created_at)}</span></div></div>)}{!(data.recent_security_events || []).length && <Empty />}</div></section>
     </div>
+  </>;
+}
+
+export function SiteContentControl() {
+  const [source, reload] = useGet("/admin/control/site-content");
+  const [form, setForm] = useState(null);
+  useEffect(() => { if (source) setForm(JSON.parse(JSON.stringify(source))); }, [source]);
+  if (!form) return <Loader label="Loading site content" />;
+
+  const setGender = (index, key, value) => setForm((f) => ({ ...f, featured_genders: f.featured_genders.map((x, i) => i === index ? { ...x, [key]: value } : x) }));
+  const setCampaign = (index, key, value) => setForm((f) => ({ ...f, campaigns: f.campaigns.map((x, i) => i === index ? { ...x, [key]: value } : x) }));
+  const addCampaign = () => setForm((f) => ({ ...f, campaigns: [...f.campaigns, { eyebrow: "NEW OFFER", title: "New marketplace campaign", text: "Describe this campaign.", cta: "Shop now", to: "/products", image: "", bg: "from-[#EAF2FB] via-white to-[#E8F7F0]", is_active: true }] }));
+  const removeCampaign = (index) => setForm((f) => ({ ...f, campaigns: f.campaigns.filter((_, i) => i !== index) }));
+  const save = async () => {
+    try {
+      const body = {
+        hero_badge: form.hero_badge || "",
+        hero_line1: form.hero_line1,
+        hero_line2: form.hero_line2,
+        hero_subtitle: form.hero_subtitle || "",
+        featured_genders: form.featured_genders,
+        campaigns: form.campaigns,
+      };
+      await api.put("/admin/control/site-content", body);
+      toast.success("Homepage content updated");
+      reload();
+    } catch (e) { toast.error(formatApiError(e)); }
+  };
+
+  return <>
+    <Header title="Site Content & Covers">Change the live homepage hero text, Men/Women feature images and offer banners without touching code.</Header>
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="font-extrabold text-slate-800">Homepage hero copy</h2>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <label className="text-xs font-bold text-slate-500">SMALL BADGE<input value={form.hero_badge || ""} onChange={(e) => setForm({ ...form, hero_badge: e.target.value })} className={`mt-1 ${inputClass}`} /></label>
+        <label className="text-xs font-bold text-slate-500">SUBTITLE<input value={form.hero_subtitle || ""} onChange={(e) => setForm({ ...form, hero_subtitle: e.target.value })} className={`mt-1 ${inputClass}`} /></label>
+        <label className="text-xs font-bold text-slate-500">HEADLINE LINE 1<input value={form.hero_line1 || ""} onChange={(e) => setForm({ ...form, hero_line1: e.target.value })} className={`mt-1 ${inputClass}`} /></label>
+        <label className="text-xs font-bold text-slate-500">HEADLINE LINE 2<input value={form.hero_line2 || ""} onChange={(e) => setForm({ ...form, hero_line2: e.target.value })} className={`mt-1 ${inputClass}`} /></label>
+      </div>
+    </section>
+
+    <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="font-extrabold text-slate-800">Featured Men / Women covers</h2>
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">{form.featured_genders.map((item, index) => <div key={index} className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="mb-3 h-32 overflow-hidden rounded-xl bg-slate-100">{item.image ? <img src={resolveImage(item.image)} alt="" className="h-full w-full object-cover" /> : null}</div><div className="grid gap-3"><input value={item.title || ""} onChange={(e) => setGender(index, "title", e.target.value)} placeholder="Title" className={inputClass} /><input value={item.subtitle || ""} onChange={(e) => setGender(index, "subtitle", e.target.value)} placeholder="Subtitle" className={inputClass} /><input value={item.to || ""} onChange={(e) => setGender(index, "to", e.target.value)} placeholder="Click destination" className={inputClass} /><ImageField label="Cover image" value={item.image} onChange={(v) => setGender(index, "image", v)} /></div></div>)}</div>
+    </section>
+
+    <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-center justify-between gap-3"><div><h2 className="font-extrabold text-slate-800">Offer banners</h2><p className="mt-1 text-xs text-slate-500">Active banners appear in the homepage auto-slider. You can add, hide, reorder later, or change every image/text/link here.</p></div><button onClick={addCampaign} className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-2 text-xs font-bold text-teal-700">+ Add banner</button></div>
+      <div className="mt-4 space-y-4">{form.campaigns.map((c, index) => <div key={index} className={`rounded-2xl border p-4 ${c.is_active === false ? "border-slate-200 bg-slate-50 opacity-70" : "border-slate-200 bg-white"}`}><div className="grid gap-4 xl:grid-cols-[210px_1fr]"><div><div className="h-32 overflow-hidden rounded-xl bg-slate-100">{c.image ? <img src={resolveImage(c.image)} alt="" className="h-full w-full object-cover" /> : null}</div><label className="mt-3 flex items-center gap-2 text-xs font-bold text-slate-600"><input type="checkbox" checked={c.is_active !== false} onChange={(e) => setCampaign(index, "is_active", e.target.checked)} /> Banner active</label></div><div className="grid gap-3 md:grid-cols-2"><input value={c.eyebrow || ""} onChange={(e) => setCampaign(index, "eyebrow", e.target.value)} placeholder="Eyebrow" className={inputClass} /><input value={c.title || ""} onChange={(e) => setCampaign(index, "title", e.target.value)} placeholder="Title" className={inputClass} /><input value={c.text || ""} onChange={(e) => setCampaign(index, "text", e.target.value)} placeholder="Description" className={`${inputClass} md:col-span-2`} /><input value={c.cta || ""} onChange={(e) => setCampaign(index, "cta", e.target.value)} placeholder="Button text" className={inputClass} /><input value={c.to || ""} onChange={(e) => setCampaign(index, "to", e.target.value)} placeholder="Click destination" className={inputClass} /><div className="md:col-span-2"><ImageField label="Banner image" value={c.image} onChange={(v) => setCampaign(index, "image", v)} /></div><button onClick={() => removeCampaign(index)} disabled={form.campaigns.length <= 1} className="w-fit rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-600 disabled:opacity-40">Remove banner</button></div></div></div>)}</div>
+    </section>
+
+    <div className="sticky bottom-4 mt-6 flex justify-end"><button onClick={save} className="rounded-xl bg-teal-600 px-6 py-3 text-sm font-extrabold text-white shadow-lg">Save live homepage content</button></div>
   </>;
 }
 

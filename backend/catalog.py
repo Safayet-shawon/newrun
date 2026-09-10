@@ -1,10 +1,10 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 from typing import Optional
-import re
 
 from db import db, NO_ID, new_id, now_iso
 from security import get_current_user, optional_user
+from search_engine import smart_product_search, smart_shop_search
 
 router = APIRouter()
 
@@ -63,16 +63,7 @@ async def list_products(
         q["brand"] = brand
     if featured is not None:
         q["is_featured"] = featured
-    if search:
-        search = re.escape(search.strip())
-        if search.lower() in ("men", "women"):
-            search = r"\b" + search + r"\b"
-        q["$or"] = [
-            {"title": {"$regex": search, "$options": "i"}},
-            {"brand": {"$regex": search, "$options": "i"}},
-            {"tags": {"$regex": search, "$options": "i"}},
-            {"shop_name": {"$regex": search, "$options": "i"}},
-        ]
+
     price_q = {}
     if min_price is not None:
         price_q["$gte"] = min_price
@@ -82,9 +73,29 @@ async def list_products(
         q["price"] = price_q
     if sort == "best_selling":
         q["sold_count"] = {"$gt": 0}
+
+    # Search is relevance-first and forgiving: synonyms, Banglish/Bangla aliases,
+    # spacing/hyphens/plurals and light typo tolerance are handled centrally.
+    if search and search.strip():
+        total, items, search_info = await smart_product_search(
+            q,
+            search,
+            sort=sort,
+            skip=skip,
+            limit=limit,
+        )
+        return {"total": total, "items": items, "search_info": search_info}
+
     total = await db.products.count_documents(q)
     if sort in ("price_low", "price_high"):
-        items = await db.products.aggregate([{"$match": q}, {"$addFields": {"effective_price": {"$ifNull": ["$discount_price", "$price"]}}}, {"$sort": {"effective_price": 1 if sort == "price_low" else -1, "id": 1}}, {"$skip": skip}, {"$limit": limit}, {"$project": {"_id": 0, "effective_price": 0}}]).to_list(limit)
+        items = await db.products.aggregate([
+            {"$match": q},
+            {"$addFields": {"effective_price": {"$ifNull": ["$discount_price", "$price"]}}},
+            {"$sort": {"effective_price": 1 if sort == "price_low" else -1, "id": 1}},
+            {"$skip": skip},
+            {"$limit": limit},
+            {"$project": {"_id": 0, "effective_price": 0}},
+        ]).to_list(limit)
     else:
         items = await db.products.find(q, {"_id": 0}).sort(_sort_products(sort)).skip(skip).limit(limit).to_list(limit)
     return {"total": total, "items": items}
@@ -115,20 +126,20 @@ async def list_brands():
 
 
 @router.get("/shops")
-async def list_shops(category: Optional[str] = None, featured: Optional[bool] = None, search: Optional[str] = None, limit: int = 40):
+async def list_shops(
+    category: Optional[str] = None,
+    featured: Optional[bool] = None,
+    search: Optional[str] = None,
+    limit: int = Query(default=40, ge=1, le=100),
+):
+    if search and search.strip():
+        return await smart_shop_search(search, category=category, featured=featured, limit=limit)
+
     q = {"status": "published"}
     if category:
         q["category"] = category
     if featured is not None:
         q["is_featured"] = featured
-    if search:
-        search = re.escape(search.strip())
-        if search.lower() in ("men", "women"):
-            search = r"\b" + search + r"\b"
-        q["$or"] = [
-            {"name": {"$regex": search, "$options": "i"}},
-            {"description": {"$regex": search, "$options": "i"}},
-        ]
     shops = await db.shops.find(q, {"_id": 0}).sort([("rating", -1)]).limit(limit).to_list(limit)
     for s in shops:
         s["product_count"] = await db.products.count_documents({"shop_id": s["id"], "status": "published"})

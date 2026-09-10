@@ -27,7 +27,7 @@ def _sort_products(cursor_field: str):
 
 @router.get("/categories")
 async def get_categories():
-    cats = await db.categories.find({}, {"_id": 0}).to_list(100)
+    cats = await db.categories.find({"is_active": {"$ne": False}}, {"_id": 0}).to_list(100)
     for c in cats:
         c["product_count"] = await db.products.count_documents({"category": c["slug"], "status": "published"})
     return cats
@@ -161,7 +161,7 @@ async def get_shop(slug: str):
 async def home_feed():
     visible = await db.shops.distinct("id", {"status": "published"})
     public_products = {"status": "published", "shop_id": {"$in": visible}}
-    cats = await db.categories.find({}, {"_id": 0}).to_list(100)
+    cats = await db.categories.find({"is_active": {"$ne": False}}, {"_id": 0}).to_list(100)
     for c in cats:
         c["product_count"] = await db.products.count_documents({"category": c["slug"], "status": "published"})
     trending = await db.products.find(public_products, {"_id": 0}).sort([("sold_count", -1)]).limit(10).to_list(10)

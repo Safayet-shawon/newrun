@@ -47,7 +47,7 @@ export default function Shops() {
     <div className="nx-container py-6 sm:py-8 animate-fade-in">
       <div className="rounded-3xl border border-[#D7E3EE] bg-gradient-to-r from-[#EAF2FB] via-white to-[#EEF8F3] p-5 sm:p-7">
         <SectionHeader eyebrow="Discover" title={q ? `Shops carrying “${q}”` : "Browse shops"} />
-        <BrowseMode category={cat} selected="shops" />
+        <BrowseMode category={cat} query={q} selected="shops" />
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="relative flex-1">
             <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-nexora-muted" />

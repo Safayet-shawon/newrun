@@ -98,7 +98,7 @@ function AppRoutes() {
       <Route path="/seller/signup" element={<SellerSignup />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
 
-      <Route path="/account" element={<RequireAuth role="customer"><AccountLayout /></RequireAuth>}>
+      <Route path="/account" element={<RequireAuth role="customer"><MarketplaceLayout><AccountLayout /></MarketplaceLayout></RequireAuth>}>
         <Route index element={<AccountOverview />} />
         <Route path="orders" element={<AccountOrders />} />
         <Route path="order-success" element={<OrderSuccess />} />

@@ -1,8 +1,9 @@
 """Nexora marketplace search helpers.
 
-The goal is forgiving ecommerce search rather than literal string matching.
-It handles spacing/hyphen/plural differences, common Bangladesh shopping words,
-Bangla/Banglish aliases, and light fuzzy typo matching.
+Forgiving ecommerce search for Bangladesh: spacing/hyphen/plural variants,
+Bangla/Banglish aliases, demographic/attribute aliases and light typo tolerance.
+The dictionary improves common intents; fuzzy/token scoring still works for new
+products that are not listed here.
 """
 
 from __future__ import annotations
@@ -15,9 +16,8 @@ from typing import Iterable
 from db import db
 
 
-# Keep these groups focused on shopping intent. The engine also performs generic
-# morphology/fuzzy matching, so new products are not limited to this dictionary.
 SYNONYM_GROUPS = {
+    # Product nouns
     "t shirt": {
         "t shirt", "tshirt", "t-shirt", "t shirts", "tshirts", "t-shirts", "tee", "tees",
         "genji", "ganji", "gengi", "gol gola genji", "gol gola ganji", "round neck tee",
@@ -68,6 +68,22 @@ SYNONYM_GROUPS = {
     "bed": {"bed", "beds", "bedstead", "খাট", "বেড"},
     "chair": {"chair", "chairs", "office chair", "চেয়ার", "চেয়ার"},
     "table": {"table", "tables", "desk", "টেবিল", "ডেস্ক"},
+
+    # Audience / common Bangladesh phrasing. These are deliberately after product
+    # nouns so a query such as "gents genji" is understood primarily as T-shirt.
+    "men": {"men", "mens", "men's", "male", "gents", "gentlemen", "man", "পুরুষ", "ছেলেদের", "জেন্টস"},
+    "women": {"women", "womens", "women's", "female", "ladies", "lady", "নারী", "মহিলা", "মেয়েদের", "মেয়েদের", "লেডিস"},
+    "kids": {"kids", "kid", "children", "child", "boys", "girls", "baby kids", "বাচ্চা", "বাচ্চাদের", "শিশু"},
+
+    # Attributes people frequently type instead of catalogue terminology.
+    "black": {"black", "kalo", "কালো"},
+    "white": {"white", "shada", "sada", "সাদা"},
+    "red": {"red", "lal", "লাল"},
+    "blue": {"blue", "nil", "নীল"},
+    "green": {"green", "shobuj", "sobuj", "সবুজ"},
+    "pink": {"pink", "golapi", "গোলাপি"},
+    "cotton": {"cotton", "suti", "সুতি"},
+    "leather": {"leather", "chamra", "চামড়া", "চামড়া"},
 }
 
 
@@ -127,34 +143,54 @@ def _same_form(a: str, b: str) -> bool:
     return SequenceMatcher(None, aa, bb).ratio() >= 0.90
 
 
-def expand_query(query: str, max_terms: int = 28) -> dict:
+def _alias_matches_query(alias: str, normalized_query: str) -> bool:
+    alias_norm = normalize_text(alias)
+    if not alias_norm:
+        return False
+    if _same_form(normalized_query, alias_norm):
+        return True
+    query_tokens = normalized_query.split()
+    if " " not in alias_norm:
+        return alias_norm in query_tokens
+    # Multi-word aliases may be embedded inside a longer descriptive query.
+    return re.search(r"(?:^|\s)" + re.escape(alias_norm) + r"(?:$|\s)", normalized_query) is not None
+
+
+def expand_query(query: str, max_terms: int = 32) -> dict:
     normalized = normalize_text(query)
     if not normalized:
-        return {"original": query, "normalized": "", "canonical": "", "terms": []}
+        return {"original": query, "normalized": "", "canonical": "", "terms": [], "alias_terms": []}
 
     terms: set[str] = set(_basic_forms(normalized))
+    alias_terms: set[str] = set()
     canonical = normalized
+    matched_family = False
 
-    # Match a synonym family even when the user changes hyphens/spaces/plurals.
     for family, aliases in SYNONYM_GROUPS.items():
         aliases_with_family = set(aliases) | {family}
-        if any(_same_form(normalized, alias) or normalize_text(alias) in normalized for alias in aliases_with_family):
-            canonical = family
+        if any(_alias_matches_query(alias, normalized) for alias in aliases_with_family):
+            if not matched_family:
+                canonical = family
+                matched_family = True
             for alias in aliases_with_family:
-                terms.update(_basic_forms(alias))
+                forms = _basic_forms(alias)
+                terms.update(forms)
+                alias_terms.update(forms)
 
-    # Add useful whole-query and token morphology for products not in our alias map.
+    # Generic morphology keeps this useful for any newly-added product/category,
+    # not only the curated synonym groups above.
     for token in normalized.split():
         if len(token) >= 3:
             terms.update(_basic_forms(token))
 
-    # Prefer human-readable forms before compact fallback forms.
     ordered = sorted(terms, key=lambda x: (" " not in x, abs(len(x) - len(normalized)), x))
+    ordered_alias = sorted(alias_terms, key=lambda x: (" " not in x, abs(len(x) - len(canonical)), x))
     return {
         "original": query,
         "normalized": normalized,
         "canonical": canonical,
         "terms": ordered[:max_terms],
+        "alias_terms": ordered_alias[:max_terms],
     }
 
 
@@ -166,9 +202,11 @@ def term_regex(term: str) -> str:
     if not parts:
         return ""
     pattern = r"[\s\-_]*".join(parts)
-    # English shopping nouns are frequently singular/plural variants.
-    if re.fullmatch(r"[a-z0-9\s]+", norm) and not norm.endswith("s"):
-        pattern += "s?"
+    if re.fullmatch(r"[a-z0-9\s]+", norm):
+        if not norm.endswith("s"):
+            pattern += "s?"
+        # Boundaries prevent men->women, male->female, ac->face, etc.
+        pattern = r"\b" + pattern + r"\b"
     return pattern
 
 
@@ -179,7 +217,7 @@ def mongo_text_clause(query: str, fields: Iterable[str] = SEARCH_FIELDS) -> dict
         pattern = term_regex(term)
         if pattern and pattern not in regexes:
             regexes.append(pattern)
-    regexes = regexes[:20]
+    regexes = regexes[:24]
     if not regexes:
         return {}
     return {
@@ -202,10 +240,7 @@ def _flatten(value: object) -> str:
 
 
 def searchable_text(document: dict) -> str:
-    parts = []
-    for field in SEARCH_FIELDS:
-        parts.append(_flatten(document.get(field)))
-    return normalize_text(" ".join(parts))
+    return normalize_text(" ".join(_flatten(document.get(field)) for field in SEARCH_FIELDS))
 
 
 def relevance_score(query: str, document: dict) -> float:
@@ -220,6 +255,8 @@ def relevance_score(query: str, document: dict) -> float:
     shop_name = normalize_text(document.get("shop_name"))
     text = searchable_text(document)
     compact_text = compact(text)
+    alias_terms = set(info.get("alias_terms") or [])
+    query_token_count = max(1, len(normalized.split()))
 
     score = 0.0
     if normalized == title:
@@ -234,17 +271,23 @@ def relevance_score(query: str, document: dict) -> float:
         score += 30
 
     best_alias = 0.0
+    best_generic = 0.0
     for term in info["terms"]:
         norm_term = normalize_text(term)
         if not norm_term:
             continue
-        if norm_term in title:
-            best_alias = max(best_alias, 75.0)
-        elif norm_term in text:
-            best_alias = max(best_alias, 45.0)
-        elif compact(norm_term) and compact(norm_term) in compact_text:
-            best_alias = max(best_alias, 40.0)
-    score += best_alias
+        is_alias = term in alias_terms
+        if norm_term in title or (compact(norm_term) and compact(norm_term) in compact(title)):
+            if is_alias:
+                best_alias = max(best_alias, 75.0)
+            else:
+                best_generic = max(best_generic, 28.0 if query_token_count == 1 else 18.0)
+        elif norm_term in text or (compact(norm_term) and compact(norm_term) in compact_text):
+            if is_alias:
+                best_alias = max(best_alias, 45.0)
+            else:
+                best_generic = max(best_generic, 18.0 if query_token_count == 1 else 10.0)
+    score += best_alias + best_generic
 
     q_tokens = [t for t in normalized.split() if len(t) > 1]
     text_tokens = set(text.split())
@@ -252,7 +295,14 @@ def relevance_score(query: str, document: dict) -> float:
         overlap = sum(1 for token in q_tokens if token in text_tokens)
         score += (overlap / len(q_tokens)) * 35
 
-    # Fuzzy typo tolerance. Compare query with title and title tokens/phrases.
+    # If the query mapped to a product/audience/attribute family, reward the
+    # canonical intent being present even when the user's exact wording is not.
+    canonical = normalize_text(info.get("canonical"))
+    if canonical and canonical != normalized:
+        canonical_family = SYNONYM_GROUPS.get(canonical, set()) | {canonical}
+        if any(normalize_text(term) in text or compact(term) in compact_text for term in canonical_family):
+            score += 24
+
     if title:
         score += SequenceMatcher(None, compact(normalized), compact(title)).ratio() * 28
         title_tokens = title.split()
@@ -263,7 +313,6 @@ def relevance_score(query: str, document: dict) -> float:
                 if ratio >= 0.72:
                     score = max(score, 28 + ratio * 38)
 
-    # Popularity is a tie breaker, not the primary relevance signal.
     score += min(float(document.get("sold_count") or 0), 500) / 500 * 8
     score += min(float(document.get("rating") or 0), 5) / 5 * 4
     return round(score, 3)
@@ -284,10 +333,9 @@ def _sort_scored(scored: list[tuple[float, dict]], sort: str) -> list[tuple[floa
 async def smart_product_search(base_query: dict, query: str, *, sort: str = "popular", skip: int = 0, limit: int = 40, candidate_limit: int = 700) -> tuple[int, list[dict], dict]:
     """Return ranked forgiving product search results.
 
-    Exact/synonym candidates are read first, then a bounded fallback pool is used
-    for typo tolerance. This is intentionally Mongo-only and dependency-light so
-    it works now; a dedicated search service can replace it later without changing
-    the API contract.
+    Synonym/lexical candidates are read first; a bounded popular fallback pool
+    supplies typo tolerance. The API contract can later be backed by Typesense,
+    Meilisearch, OpenSearch, etc. without changing the frontend.
     """
     info = expand_query(query)
     clause = mongo_text_clause(query)
@@ -298,7 +346,7 @@ async def smart_product_search(base_query: dict, query: str, *, sort: str = "pop
         candidates = await db.products.find(exact_query, {"_id": 0}).limit(candidate_limit).to_list(candidate_limit)
 
     seen = {p.get("id") for p in candidates}
-    if len(candidates) < min(120, candidate_limit):
+    if len(candidates) < min(150, candidate_limit):
         fallback = await db.products.find(base_query, {"_id": 0}).sort([("sold_count", -1), ("rating", -1)]).limit(candidate_limit).to_list(candidate_limit)
         for product in fallback:
             if product.get("id") not in seen:
@@ -308,7 +356,6 @@ async def smart_product_search(base_query: dict, query: str, *, sort: str = "pop
     scored = []
     for product in candidates:
         score = relevance_score(query, product)
-        # 31 keeps meaningful fuzzy/alias results while rejecting unrelated stock.
         if score >= 31:
             scored.append((score, product))
 
@@ -323,15 +370,15 @@ async def smart_product_search(base_query: dict, query: str, *, sort: str = "pop
 
 
 async def smart_shop_search(query: str, *, category: str | None = None, featured: bool | None = None, limit: int = 40) -> list[dict]:
-    """Match shops by their own identity OR by products they currently carry."""
+    """Match live shops by their own identity OR by products they carry now."""
     shop_base: dict = {"status": "published"}
-    if category:
-        shop_base["category"] = category
     if featured is not None:
         shop_base["is_featured"] = featured
 
-    shops = await db.shops.find(shop_base, {"_id": 0}).limit(500).to_list(500)
+    shops = await db.shops.find(shop_base, {"_id": 0}).limit(700).to_list(700)
     if not query.strip():
+        if category:
+            shops = [s for s in shops if s.get("category") == category]
         shops.sort(key=lambda s: (float(s.get("rating") or 0), str(s.get("created_at") or "")), reverse=True)
         return shops[:limit]
 
@@ -339,27 +386,29 @@ async def smart_shop_search(query: str, *, category: str | None = None, featured
     product_base = {"status": "published", "shop_id": {"$in": visible_ids}}
     if category:
         product_base["category"] = category
-    _, matching_products, _ = await smart_product_search(product_base, query, limit=500, candidate_limit=900)
+    _, matching_products, _ = await smart_product_search(product_base, query, limit=600, candidate_limit=1000)
 
     products_by_shop: dict[str, list[dict]] = {}
     for p in matching_products:
         products_by_shop.setdefault(p.get("shop_id"), []).append(p)
 
     qnorm = normalize_text(query)
+    qcompact = compact(qnorm)
     ranked = []
     for shop in shops:
         own_text = normalize_text(f"{shop.get('name', '')} {shop.get('description', '')} {shop.get('category', '')} {shop.get('slug', '')}")
-        own_ratio = SequenceMatcher(None, compact(qnorm), compact(own_text)).ratio() if own_text else 0
+        own_ratio = SequenceMatcher(None, qcompact, compact(own_text)).ratio() if own_text else 0
         own_match = qnorm in own_text or own_ratio >= 0.58
         carried = products_by_shop.get(shop.get("id"), [])
-        if not own_match and not carried:
+        category_match = not category or shop.get("category") == category or bool(carried)
+        if not category_match or (not own_match and not carried):
             continue
         row = dict(shop)
         row["matching_product_count"] = len(carried)
         row["matching_products"] = carried[:3]
         row["matched_by"] = "shop_and_products" if own_match and carried else "shop" if own_match else "products"
         row["product_count"] = await db.products.count_documents({"shop_id": shop["id"], "status": "published"})
-        score = (90 if qnorm == normalize_text(shop.get("name")) else 55 if own_match else 0) + min(len(carried), 20) * 5 + float(shop.get("rating") or 0)
+        score = (100 if qnorm == normalize_text(shop.get("name")) else 60 if own_match else 0) + min(len(carried), 20) * 5 + float(shop.get("rating") or 0)
         ranked.append((score, row))
 
     ranked.sort(key=lambda row: row[0], reverse=True)

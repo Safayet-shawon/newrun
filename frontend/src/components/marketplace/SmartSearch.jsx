@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Camera, ImageSearch, Search, Store, Tag, X } from "lucide-react";
+import { Camera, Images, Search, Store, Tag, X } from "lucide-react";
 import { toast } from "sonner";
 import { api, resolveImage } from "@/lib/api";
 import { effectivePrice, formatBDT } from "@/lib/format";
@@ -209,7 +209,7 @@ export default function SmartSearch({ mobile = false }) {
               </div>
             )}
 
-            <button type="button" onClick={() => fileRef.current?.click()} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[#BFD1DF] bg-[#F6FAFD] px-3 py-2.5 text-xs font-bold text-[#315C89] transition hover:bg-[#EAF2FB]"><ImageSearch size={16} /> Search similar products with a photo</button>
+            <button type="button" onClick={() => fileRef.current?.click()} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[#BFD1DF] bg-[#F6FAFD] px-3 py-2.5 text-xs font-bold text-[#315C89] transition hover:bg-[#EAF2FB]"><Images size={16} /> Search similar products with a photo</button>
           </div>
         </div>
       )}

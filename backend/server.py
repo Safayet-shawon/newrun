@@ -41,8 +41,6 @@ import storage
 
 subscription_tokens.install_seller_expiry_guard(seller)
 
-# Auto-sync and manual scans use the deep multi-page scanner. The gateway owns
-# the public /scan endpoint and sends Facebook links directly to assisted mode.
 store_importer.scan_store_sync = deep_catalog_scanner.deep_scan_sync
 browser_store_scanner.composite_scan_sync = deep_catalog_scanner.deep_scan_sync
 
@@ -93,6 +91,11 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger("nexora")
+
+
+def _worker_enabled() -> bool:
+    default = "false" if os.getenv("APP_ENV", "development").lower() == "production" else "true"
+    return os.getenv("RUN_IMPORT_SYNC_WORKER", default).lower() in {"1", "true", "yes", "on"}
 
 
 @app.middleware("http")
@@ -174,18 +177,22 @@ async def startup():
             "or install requirements + Playwright Chromium before browser-assisted imports."
         )
 
-    try:
-        store_importer.start_sync_worker()
-        logger.info("Store import sync worker started")
-    except Exception as e:
-        logger.error(f"Store import sync worker failed to start: {e}")
+    if _worker_enabled():
+        try:
+            store_importer.start_sync_worker()
+            logger.info("Store import sync worker started inside API process")
+        except Exception as e:
+            logger.error(f"Store import sync worker failed to start: {e}")
+    else:
+        logger.info("Store import sync worker disabled in API process")
 
 
 @app.on_event("shutdown")
 async def shutdown():
     try:
         await browser_store_scanner.close_all_manual_sessions()
-        await store_importer.stop_sync_worker()
+        if _worker_enabled():
+            await store_importer.stop_sync_worker()
     finally:
         from db import client
         client.close()

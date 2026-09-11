@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { NavLink, Outlet, Link, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, ShoppingCart, Package, PlusCircle, Boxes, Store, Palette,
-  CreditCard, Users, Star, BarChart3, Settings, Bell, Menu, X, ExternalLink,
+  CreditCard, Wallet, Users, Star, BarChart3, Settings, Bell, Menu, X, ExternalLink,
   Eye, LogOut, ChevronDown, Sparkles, Globe2, Lock,
 } from "lucide-react";
 import { Logo, Loader } from "@/components/shared/Bits";
@@ -19,6 +19,7 @@ const NAV = [
   { to: "/seller/dashboard/store", icon: Store, label: "Store" },
   { to: "/seller/dashboard/themes", icon: Palette, label: "Themes" },
   { to: "/seller/dashboard/subscription", icon: CreditCard, label: "Subscription" },
+  { to: "/seller/dashboard/wallet", icon: Wallet, label: "Nexora Wallet" },
   { to: "/seller/dashboard/customers", icon: Users, label: "Customers" },
   { to: "/seller/dashboard/reviews", icon: Star, label: "Reviews" },
   { to: "/seller/dashboard/analytics", icon: BarChart3, label: "Analytics" },

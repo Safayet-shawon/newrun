@@ -19,6 +19,8 @@ class GlobalSellerSettings(BaseModel):
     international_fee_bdt: float = Field(default=1500, ge=0, le=10_000_000)
     free_shipping_over_bdt: float = Field(default=2000, ge=0, le=100_000_000)
     processing_days: int = Field(default=2, ge=0, le=60)
+    cod_domestic: bool = True
+    cod_international: bool = False
 
 
 async def _shop_for(user_id: str):
@@ -39,6 +41,8 @@ def _payload(shop: dict):
         "international_fee_bdt": float(cfg.get("international_fee_bdt", 1500) or 0),
         "free_shipping_over_bdt": float(cfg.get("free_shipping_over_bdt", 2000) or 0),
         "processing_days": int(cfg.get("processing_days", 2) or 0),
+        "cod_domestic": bool(cfg.get("cod_domestic", True)),
+        "cod_international": bool(cfg.get("cod_international", False)),
     }
 
 
@@ -67,6 +71,8 @@ async def update_global_settings(body: GlobalSellerSettings, user=Depends(seller
         "international_fee_bdt": body.international_fee_bdt,
         "free_shipping_over_bdt": body.free_shipping_over_bdt,
         "processing_days": body.processing_days,
+        "cod_domestic": body.cod_domestic,
+        "cod_international": body.cod_international if body.ships_international else False,
     }
     await db.shops.update_one(
         {"id": shop["id"]},

@@ -1,0 +1,34 @@
+services:
+  api:
+    build:
+      context: ./backend
+    env_file:
+      - ./backend/.env
+    environment:
+      RUN_IMPORT_SYNC_WORKER: "false"
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+
+  import-worker:
+    build:
+      context: ./backend
+    env_file:
+      - ./backend/.env
+    command: ["python", "worker.py"]
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        REACT_APP_BACKEND_URL: ${REACT_APP_BACKEND_URL}
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+
+# Production should use an external transaction-capable MongoDB replica set
+# (for example MongoDB Atlas) and durable object storage. Do not run checkout
+# against a standalone single-node MongoDB server.

@@ -139,6 +139,7 @@ function AppRoutes() {
         <Route path="store" element={<StoreBuilder />} />
         <Route path="themes" element={<Themes />} />
         <Route path="subscription" element={<Subscription />} />
+        <Route path="wallet" element={<AccountWallet />} />
         <Route path="customers" element={<Customers />} />
         <Route path="reviews" element={<ReviewsPage />} />
         <Route path="analytics" element={<Analytics />} />

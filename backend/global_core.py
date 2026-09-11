@@ -82,8 +82,9 @@ def international_shipping_enabled() -> bool:
 def shipping_for_shop(shop: dict, address: dict, subtotal_paisa: int) -> int:
     """Calculate delivery fee independently for one seller/shop.
 
-    Shop-level shipping_config can override environment defaults. All returned
-    values are BDT paisa so existing checkout accounting stays deterministic.
+    International delivery is deny-by-default. A seller must explicitly enable
+    ships_international, and can optionally limit destinations with a country
+    allowlist. This prevents old shops from accidentally accepting global orders.
     """
     cfg = shop.get("shipping_config") or {}
     origin = normalize_country(cfg.get("origin_country") or shop.get("country_code") or "BD")
@@ -94,7 +95,7 @@ def shipping_for_shop(shop: dict, address: dict, subtotal_paisa: int) -> int:
     if not domestic:
         if not international_shipping_enabled():
             raise ValueError("International shipping is temporarily unavailable")
-        if cfg.get("ships_international") is False:
+        if not bool(cfg.get("ships_international", False)):
             raise ValueError(f"{shop.get('name', 'This shop')} does not ship internationally")
         if allowed and destination not in allowed:
             raise ValueError(f"{shop.get('name', 'This shop')} does not ship to {destination}")

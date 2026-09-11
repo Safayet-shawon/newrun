@@ -1,10 +1,11 @@
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from typing import List, Optional
 
 from db import db, new_id, now_iso
 from security import get_current_user, optional_user
 from order_models import CartItem
+from global_core import normalize_country
 
 router = APIRouter()
 
@@ -74,40 +75,74 @@ async def update_profile(body: ProfileUpdate, user: dict = Depends(get_current_u
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     if updates:
         await db.users.update_one({"id": user["id"]}, {"$set": updates})
-    u = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password_hash": 0})
+    u = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password_hash": 0, "session_version": 0})
     return u
 
 
 class Address(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     id: Optional[str] = None
-    label: str
-    full_name: str
-    phone: str
-    address: str
-    city: str
-    area: Optional[str] = ""
+    label: str = Field(min_length=1, max_length=40)
+    full_name: str = Field(min_length=2, max_length=120)
+    phone: str = Field(min_length=6, max_length=24)
+    address: str = Field(min_length=3, max_length=300)
+    address_line2: Optional[str] = Field(default="", max_length=200)
+    area: Optional[str] = Field(default="", max_length=120)
+    city: str = Field(min_length=1, max_length=120)
+    state: Optional[str] = Field(default="", max_length=120)
+    postal_code: Optional[str] = Field(default="", max_length=30)
+    country_code: str = Field(default="BD", min_length=2, max_length=2)
     is_default: bool = False
+
+
+def _address_payload(body: Address) -> dict:
+    data = body.model_dump(exclude={"id"})
+    data["country_code"] = normalize_country(data.get("country_code"))
+    data["full_name"] = data["full_name"].strip()
+    data["phone"] = data["phone"].strip()
+    data["address"] = data["address"].strip()
+    data["city"] = data["city"].strip()
+    return data
 
 
 @router.get("/account/addresses")
 async def get_addresses(user: dict = Depends(get_current_user)):
-    return await db.addresses.find({"user_id": user["id"]}, {"_id": 0}).to_list(100)
+    return await db.addresses.find({"user_id": user["id"]}, {"_id": 0}).sort([("is_default", -1)]).to_list(100)
 
 
 @router.post("/account/addresses")
 async def add_address(body: Address, user: dict = Depends(get_current_user)):
-    addr = body.model_dump()
+    addr = _address_payload(body)
     addr["id"] = new_id("addr_")
     addr["user_id"] = user["id"]
+    if not await db.addresses.find_one({"user_id": user["id"]}):
+        addr["is_default"] = True
     if addr["is_default"]:
         await db.addresses.update_many({"user_id": user["id"]}, {"$set": {"is_default": False}})
     await db.addresses.insert_one(dict(addr))
     return addr
 
 
+@router.put("/account/addresses/{address_id}")
+async def update_address(address_id: str, body: Address, user: dict = Depends(get_current_user)):
+    current = await db.addresses.find_one({"id": address_id, "user_id": user["id"]}, {"_id": 0})
+    if not current:
+        raise HTTPException(404, "Address not found")
+    updates = _address_payload(body)
+    if updates["is_default"]:
+        await db.addresses.update_many({"user_id": user["id"]}, {"$set": {"is_default": False}})
+    await db.addresses.update_one({"id": address_id, "user_id": user["id"]}, {"$set": {**updates, "updated_at": now_iso()}})
+    return await db.addresses.find_one({"id": address_id, "user_id": user["id"]}, {"_id": 0})
+
+
 @router.delete("/account/addresses/{address_id}")
 async def delete_address(address_id: str, user: dict = Depends(get_current_user)):
+    deleted = await db.addresses.find_one({"id": address_id, "user_id": user["id"]}, {"_id": 0})
     await db.addresses.delete_one({"id": address_id, "user_id": user["id"]})
+    if deleted and deleted.get("is_default"):
+        first = await db.addresses.find_one({"user_id": user["id"]}, {"_id": 0})
+        if first:
+            await db.addresses.update_one({"id": first["id"]}, {"$set": {"is_default": True}})
     return {"ok": True}
 
 

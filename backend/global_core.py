@@ -23,13 +23,6 @@ SUPPORTED_CURRENCIES = {
 }
 
 
-def _decimal_env(name: str, default: str) -> Decimal:
-    try:
-        return Decimal(str(os.getenv(name, default)))
-    except (InvalidOperation, ValueError):
-        return Decimal(default)
-
-
 def configured_fx_rates() -> dict[str, Decimal]:
     """Return rates expressed as 1 BDT = X target currency.
 
@@ -77,9 +70,13 @@ def convert_amount(amount: Decimal | float | int, from_currency: str, to_currenc
 
 def normalize_country(value: Optional[str]) -> str:
     code = (value or os.getenv("DEFAULT_COUNTRY_CODE", "BD")).strip().upper()
-    if not code or len(code) > 2:
+    if not code or len(code) != 2 or not code.isalpha():
         return "BD"
     return code
+
+
+def international_shipping_enabled() -> bool:
+    return os.getenv("INTERNATIONAL_SHIPPING_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
 
 
 def shipping_for_shop(shop: dict, address: dict, subtotal_paisa: int) -> int:
@@ -95,6 +92,8 @@ def shipping_for_shop(shop: dict, address: dict, subtotal_paisa: int) -> int:
 
     allowed = [str(x).upper() for x in (cfg.get("allowed_countries") or []) if x]
     if not domestic:
+        if not international_shipping_enabled():
+            raise ValueError("International shipping is temporarily unavailable")
         if cfg.get("ships_international") is False:
             raise ValueError(f"{shop.get('name', 'This shop')} does not ship internationally")
         if allowed and destination not in allowed:
@@ -129,7 +128,7 @@ def global_config_payload() -> dict:
             }
             for code, meta in SUPPORTED_CURRENCIES.items()
         ],
-        "international_shipping_enabled": os.getenv("INTERNATIONAL_SHIPPING_ENABLED", "true").lower() in {"1", "true", "yes", "on"},
+        "international_shipping_enabled": international_shipping_enabled(),
     }
 
 

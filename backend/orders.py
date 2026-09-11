@@ -10,7 +10,7 @@ from security import get_current_user
 from order_models import CheckoutBody
 from product_rules import resolve_selection
 from wallet import debit_wallet, mode as wallet_mode
-from global_core import shipping_for_shop
+from global_core import shipping_for_shop, normalize_country
 
 router = APIRouter()
 
@@ -79,15 +79,26 @@ async def build_quote(body, user, session=None):
 
     subtotal = sum(g["subtotal_paisa"] for g in grouped.values())
     total_shipping = 0
+    destination = normalize_country(address.get("country_code"))
     for group in grouped.values():
+        shop = shops[group["shop_id"]]
+        cfg = shop.get("shipping_config") or {}
+        origin = normalize_country(cfg.get("origin_country") or shop.get("country_code") or "BD")
+        domestic = origin == destination
+        if body.payment_method == "cash_on_delivery":
+            cod_allowed = bool(cfg.get("cod_domestic", True)) if domestic else bool(cfg.get("cod_international", False))
+            if not cod_allowed:
+                raise HTTPException(409, f"Cash on delivery is not available from {shop.get('name', 'this shop')} to {destination}. Choose Nexora Wallet or another supported prepaid method.")
         try:
-            shipping = shipping_for_shop(shops[group["shop_id"]], address, group["subtotal_paisa"])
+            shipping = shipping_for_shop(shop, address, group["subtotal_paisa"])
         except ValueError as exc:
             raise HTTPException(409, str(exc)) from exc
         group["delivery_paisa"] = shipping
         group["total_paisa"] = group["subtotal_paisa"] + shipping
         group["total"] = group["total_paisa"] / 100
         group["currency"] = "BDT"
+        group["origin_country"] = origin
+        group["destination_country"] = destination
         total_shipping += shipping
 
     quote = {
@@ -96,6 +107,7 @@ async def build_quote(body, user, session=None):
         "delivery_paisa": total_shipping,
         "total_paisa": subtotal + total_shipping,
         "currency": "BDT",
+        "destination_country": destination,
         "payment_method": body.payment_method,
     }
     return quote, address, stock_totals, variant_totals, inventory

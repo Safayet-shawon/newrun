@@ -5,24 +5,73 @@ import { api, formatApiError } from "@/lib/api";
 import { formatBDT } from "@/lib/format";
 
 export default function AccountWallet() {
-  const [data,setData]=useState(null), [error,setError]=useState(""), [busy,setBusy]=useState(false);
-  const [amount,setAmount]=useState("500"), [phone,setPhone]=useState("");
-  const key=useRef(crypto.randomUUID());
-  const [params]=useSearchParams();
-  const refresh=useCallback(async()=>{try {const response=await api.get("/account/wallet");setData(response.data);setError("");} catch(e){setError(formatApiError(e));}},[]);
-  useEffect(()=>{refresh();},[refresh]);
-  useEffect(()=>{key.current=crypto.randomUUID();},[amount,phone]);
-  const addMoney=async e=>{e.preventDefault();setBusy(true);setError("");try {const response=await api.post("/account/wallet/deposits",{amount_paisa:Math.round(Number(amount)*100),phone,idempotency_key:key.current});window.location.assign(response.data.gateway_url);}catch(e){setError(formatApiError(e));setBusy(false);}};
+  const [data, setData] = useState(null);
+  const [global, setGlobal] = useState(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [amount, setAmount] = useState("500");
+  const [phone, setPhone] = useState("");
+  const [provider, setProvider] = useState("sslcommerz");
+  const [currency, setCurrency] = useState("USD");
+  const key = useRef(crypto.randomUUID());
+  const [params] = useSearchParams();
+
+  const refresh = useCallback(async () => {
+    try {
+      const [wallet, cfg] = await Promise.all([api.get("/account/wallet"), api.get("/global/config")]);
+      setData(wallet.data);
+      setGlobal(cfg.data);
+      const providers = wallet.data.topup_providers || {};
+      if (!providers.sslcommerz && providers.stripe) setProvider("stripe");
+      setError("");
+    } catch (e) {
+      setError(formatApiError(e));
+    }
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => { key.current = crypto.randomUUID(); }, [amount, phone, provider, currency]);
+
+  const enabledCurrencies = (global?.currencies || []).filter((c) => c.enabled && c.code !== "BDT");
+
+  const addMoney = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const amount_paisa = Math.round(Number(amount) * 100);
+      const response = provider === "stripe"
+        ? await api.post("/account/wallet/deposits/stripe", { amount_paisa, currency, idempotency_key: key.current })
+        : await api.post("/account/wallet/deposits", { amount_paisa, phone, idempotency_key: key.current });
+      window.location.assign(response.data.gateway_url);
+    } catch (e) {
+      setError(formatApiError(e));
+      setBusy(false);
+    }
+  };
+
+  const providers = data?.topup_providers || {};
+
   return <div className="space-y-6">
     <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs uppercase tracking-widest text-nexora-emerald">Your Nexora account</p><h1 className="mt-1 text-3xl font-bold">Nexora Wallet</h1></div><button onClick={refresh} className="nx-btn-ghost"><RefreshCw size={15}/> Refresh balance</button></div>
     {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
-    {params.has("payment") && <p role="status" className="rounded-lg bg-nexora-mintbg p-4 text-sm">Your payment is being checked. Only confirmed payments are added. Refresh to see the latest balance.</p>}
+    {params.has("payment") && <p role="status" className="rounded-lg bg-nexora-mintbg p-4 text-sm">Your payment is being checked. Only provider-verified payments are added. Refresh to see the latest balance.</p>}
     <div className="grid gap-5 xl:grid-cols-2">
       <div className="rounded-2xl bg-[#1e1b2e] p-7 text-white"><div className="flex items-center justify-between"><span className="text-sm tracking-widest">NEXORA</span><Wallet size={25}/></div><p className="mt-8 text-sm text-white/70">{data?.mode === "sandbox" ? "Test balance · Sandbox" : "Available balance"}</p><p className="mt-2 text-4xl font-semibold">{data ? formatBDT(data.balance_paisa/100) : "—"}</p><p className="mt-5 text-sm text-white/70">{data?.mode === "sandbox" ? "Test funds are kept separate from real money." : "Use your balance at Nexora checkout."}</p><Link to="/checkout" className="mt-5 inline-flex items-center gap-2 text-sm text-white">Go to checkout <ArrowUpRight size={16}/></Link></div>
-      <form onSubmit={addMoney} className="rounded-xl border border-nexora-border bg-white p-6"><h2 className="text-xl font-bold">Add money</h2><p className="mt-1 text-sm text-nexora-muted">Choose an amount, then pay on the provider’s secure page.</p><div className="my-4 flex flex-wrap gap-2">{[100,500,1000,2000].map(n=><button type="button" key={n} onClick={()=>setAmount(String(n))} className={`rounded-lg border px-3 py-2 text-sm ${amount===String(n)?"border-nexora-emerald bg-nexora-mintbg":"border-nexora-border"}`}>{formatBDT(n)}</button>)}</div><label className="block text-sm">Amount (BDT)<input required type="number" min="10" max="500000" step="0.01" value={amount} onChange={e=>setAmount(e.target.value)} className="mt-1 block w-full rounded-lg border p-3"/></label><label className="mt-3 block text-sm">Mobile number<input required type="tel" pattern="\+?[0-9]{10,15}" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="01XXXXXXXXX" className="mt-1 block w-full rounded-lg border p-3"/></label><button disabled={busy || !data?.topup_enabled} className="nx-btn-primary mt-4 w-full disabled:cursor-not-allowed disabled:opacity-50"><Plus size={16}/>{busy ? "Opening payment…" : "Continue to payment"}</button>{data && !data.topup_enabled && <p className="mt-3 text-sm text-nexora-muted">Adding money will be available once the payment provider is connected.</p>}<p className="mt-3 text-xs text-nexora-muted">Available cards and mobile banking methods appear on the provider’s payment page.</p></form>
+      <form onSubmit={addMoney} className="rounded-xl border border-nexora-border bg-white p-6">
+        <h2 className="text-xl font-bold">Add money</h2>
+        <p className="mt-1 text-sm text-nexora-muted">Fund your BDT wallet through a configured local or international payment provider.</p>
+        {(providers.sslcommerz || providers.stripe) && <div className="mt-4 grid grid-cols-2 gap-2">{providers.sslcommerz && <button type="button" onClick={() => setProvider("sslcommerz")} className={`rounded-xl border px-3 py-2 text-sm font-semibold ${provider === "sslcommerz" ? "border-nexora-emerald bg-nexora-mintbg" : "border-nexora-border"}`}>Bangladesh gateway</button>}{providers.stripe && <button type="button" onClick={() => setProvider("stripe")} className={`rounded-xl border px-3 py-2 text-sm font-semibold ${provider === "stripe" ? "border-nexora-emerald bg-nexora-mintbg" : "border-nexora-border"}`}>International card</button>}</div>}
+        <div className="my-4 flex flex-wrap gap-2">{[100,500,1000,2000].map((n) => <button type="button" key={n} onClick={() => setAmount(String(n))} className={`rounded-lg border px-3 py-2 text-sm ${amount === String(n) ? "border-nexora-emerald bg-nexora-mintbg" : "border-nexora-border"}`}>{formatBDT(n)}</button>)}</div>
+        <label className="block text-sm">Wallet amount (BDT)<input required type="number" min="10" max="500000" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className="mt-1 block w-full rounded-lg border p-3"/></label>
+        {provider === "sslcommerz" ? <label className="mt-3 block text-sm">Mobile number<input required type="tel" pattern="\+?[0-9]{10,15}" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="01XXXXXXXXX" className="mt-1 block w-full rounded-lg border p-3"/></label> : <label className="mt-3 block text-sm">Charge currency<select required value={currency} onChange={(e) => setCurrency(e.target.value)} className="mt-1 block w-full rounded-lg border p-3">{enabledCurrencies.map((c) => <option key={c.code} value={c.code}>{c.code} · {c.name}</option>)}</select><span className="mt-1 block text-xs text-nexora-muted">The card provider charges this currency using the configured Nexora FX snapshot. Your wallet is credited in BDT only after webhook verification.</span></label>}
+        <button disabled={busy || !data?.topup_enabled || (provider === "stripe" && enabledCurrencies.length === 0)} className="nx-btn-primary mt-4 w-full disabled:cursor-not-allowed disabled:opacity-50"><Plus size={16}/>{busy ? "Opening payment…" : "Continue to secure payment"}</button>
+        {data && !data.topup_enabled && <p className="mt-3 text-sm text-nexora-muted">Adding money will be available once a merchant payment provider is connected.</p>}
+        {provider === "stripe" && providers.stripe && enabledCurrencies.length === 0 && <p className="mt-3 text-sm text-amber-700">International FX rates are not configured yet.</p>}
+      </form>
     </div>
-    <section className="rounded-xl border border-nexora-border bg-white p-5"><h2 className="text-xl font-bold">Transaction history</h2><p className="mt-1 text-sm text-nexora-muted">Your latest 100 deposits and purchases.</p>{data?.transactions.length === 0 && <p className="py-8 text-center text-sm text-nexora-muted">No transactions yet. Your activity will appear here.</p>}<div className="mt-4 divide-y">{data?.transactions.map(t=><div key={t.id} className="flex justify-between gap-3 py-4"><div><p className="font-semibold">{t.description}</p><p className="mt-1 text-xs text-nexora-muted">{new Date(t.created_at).toLocaleString()} · {t.reference}</p></div><span className={`whitespace-nowrap font-semibold ${t.amount_paisa>0?"text-nexora-emerald":""}`}>{t.amount_paisa>0?"+":"−"}{formatBDT(Math.abs(t.amount_paisa)/100)}</span></div>)}</div></section>
-    {data?.deposits.some(d=>d.status!=="credited") && <section className="rounded-xl border border-nexora-border p-5"><h2 className="text-lg font-bold">Pending deposits</h2><p className="mt-1 text-sm text-nexora-muted">These have not been added to your balance. If a payment was deducted, keep its reference for support.</p>{data.deposits.filter(d=>d.status!=="credited").map(d=><div key={d.id} className="mt-3 flex flex-wrap justify-between gap-2 text-sm"><span>{d.id}</span><span>{formatBDT(d.amount_paisa/100)} · Awaiting confirmation</span></div>)}</section>}
+    <section className="rounded-xl border border-nexora-border bg-white p-5"><h2 className="text-xl font-bold">Transaction history</h2><p className="mt-1 text-sm text-nexora-muted">Your latest 100 deposits and purchases.</p>{data?.transactions.length === 0 && <p className="py-8 text-center text-sm text-nexora-muted">No transactions yet. Your activity will appear here.</p>}<div className="mt-4 divide-y">{data?.transactions.map((t) => <div key={t.id} className="flex justify-between gap-3 py-4"><div><p className="font-semibold">{t.description}</p><p className="mt-1 text-xs text-nexora-muted">{new Date(t.created_at).toLocaleString()} · {t.reference}</p></div><span className={`whitespace-nowrap font-semibold ${t.amount_paisa > 0 ? "text-nexora-emerald" : ""}`}>{t.amount_paisa > 0 ? "+" : "−"}{formatBDT(Math.abs(t.amount_paisa)/100)}</span></div>)}</div></section>
+    {data?.deposits.some((d) => d.status !== "credited") && <section className="rounded-xl border border-nexora-border p-5"><h2 className="text-lg font-bold">Pending deposits</h2><p className="mt-1 text-sm text-nexora-muted">These have not been added to your balance. If a payment was deducted, keep its reference for support.</p>{data.deposits.filter((d) => d.status !== "credited").map((d) => <div key={d.id} className="mt-3 flex flex-wrap justify-between gap-2 text-sm"><span>{d.id}</span><span>{formatBDT(d.amount_paisa/100)} · {d.provider || "payment"} · Awaiting confirmation</span></div>)}</section>}
     <Link to="/" className="nx-btn-ghost">Continue shopping →</Link>
   </div>;
 }

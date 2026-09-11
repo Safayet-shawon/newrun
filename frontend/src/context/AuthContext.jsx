@@ -1,32 +1,30 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { api, formatApiError } from "@/lib/api";
+import { api, formatApiError, setAccessToken, clearAccessToken } from "@/lib/api";
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null); // null = none, object = logged in
+  const [user, setUser] = useState(null);
   const [sellerSetup, setSellerSetup] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const applyAuth = useCallback((data) => {
-    localStorage.setItem("nexora_token", data.token);
+    setAccessToken(data.token);
     setUser(data.user);
     setSellerSetup(data.seller_setup || null);
     return data;
   }, []);
 
   const checkAuth = useCallback(async () => {
-    const token = localStorage.getItem("nexora_token");
-    if (!token) {
-      setLoading(false);
-      return;
-    }
     try {
-      const { data } = await api.get("/auth/me");
-      setUser(data.user);
-      setSellerSetup(data.seller_setup || null);
+      const { data: session } = await api.post("/auth/refresh");
+      setAccessToken(session.token);
+      setUser(session.user);
+      setSellerSetup(session.seller_setup || null);
     } catch (e) {
-      localStorage.removeItem("nexora_token");
+      clearAccessToken();
+      setUser(null);
+      setSellerSetup(null);
     } finally {
       setLoading(false);
     }
@@ -35,7 +33,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (window.location.hash?.includes("session_id=")) {
       setLoading(false);
-      return; // AuthCallback will establish the session
+      return;
     }
     checkAuth();
   }, [checkAuth]);
@@ -44,20 +42,35 @@ export function AuthProvider({ children }) {
     const { data } = await api.post("/auth/login", { email, password });
     return applyAuth(data);
   };
+
   const register = async (payload) => {
     const { data } = await api.post("/auth/register", payload);
     return applyAuth(data);
   };
+
   const googleAuth = async (session_id, role) => {
     const { data } = await api.post("/auth/google", { session_id, role });
     return applyAuth(data);
   };
+
   const logout = () => {
-    localStorage.removeItem("nexora_token");
+    api.post("/auth/logout").catch(() => {});
+    clearAccessToken();
     setUser(null);
     setSellerSetup(null);
   };
-  const refreshMe = checkAuth;
+
+  const refreshMe = async () => {
+    try {
+      const { data } = await api.get("/auth/me");
+      setUser(data.user);
+      setSellerSetup(data.seller_setup || null);
+      return data;
+    } catch (error) {
+      await checkAuth();
+      return null;
+    }
+  };
 
   return (
     <AuthContext.Provider value={{ user, sellerSetup, loading, login, register, googleAuth, logout, refreshMe, setSellerSetup, formatApiError }}>

@@ -20,6 +20,8 @@ import Checkout from "@/pages/Checkout";
 import Login from "@/pages/auth/Login";
 import Signup from "@/pages/auth/Signup";
 import ForgotPassword from "@/pages/auth/ForgotPassword";
+import ResetPassword from "@/pages/auth/ResetPassword";
+import VerifyEmail from "@/pages/auth/VerifyEmail";
 import SellerLogin from "@/pages/auth/SellerLogin";
 import SellerSignup from "@/pages/auth/SellerSignup";
 import AuthCallback from "@/pages/auth/AuthCallback";
@@ -102,6 +104,8 @@ function AppRoutes() {
       <Route path="/admin/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/verify-email" element={<VerifyEmail />} />
       <Route path="/seller/login" element={<SellerLogin />} />
       <Route path="/seller/signup" element={<SellerSignup />} />
       <Route path="/auth/callback" element={<AuthCallback />} />

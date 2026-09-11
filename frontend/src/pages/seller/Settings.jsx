@@ -39,6 +39,8 @@ export default function Settings() {
           international_fee_bdt: Number(global.international_fee_bdt || 0),
           free_shipping_over_bdt: Number(global.free_shipping_over_bdt || 0),
           processing_days: Number(global.processing_days || 0),
+          cod_domestic: !!global.cod_domestic,
+          cod_international: !!global.cod_international,
         }),
       ]);
       await reload();
@@ -65,17 +67,22 @@ export default function Settings() {
       </div>
 
       <div className="space-y-4 rounded-2xl border border-nexora-border bg-white p-6">
-        <div><h3 className="font-bold text-nexora-ink">Global selling & delivery</h3><p className="mt-1 text-sm text-nexora-muted">Set where your shop ships from and whether international customers can order.</p></div>
+        <div><h3 className="font-bold text-nexora-ink">Global selling & delivery</h3><p className="mt-1 text-sm text-nexora-muted">Set where your shop ships from and exactly which payment/delivery combinations you accept.</p></div>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="text-sm font-medium text-nexora-ink">Origin country code<input value={global.origin_country} onChange={(e) => updateGlobal("origin_country", e.target.value.toUpperCase().slice(0, 2))} placeholder="BD" className={`mt-1.5 ${input}`} /></label>
-          <label className="text-sm font-medium text-nexora-ink">Preferred currency<select value={global.preferred_currency} onChange={(e) => updateGlobal("preferred_currency", e.target.value)} className={`mt-1.5 ${input}`}>{currencies.map((c) => <option key={c}>{c}</option>)}</select></label>
+          <label className="text-sm font-medium text-nexora-ink">Preferred display currency<select value={global.preferred_currency} onChange={(e) => updateGlobal("preferred_currency", e.target.value)} className={`mt-1.5 ${input}`}>{currencies.map((c) => <option key={c}>{c}</option>)}</select></label>
           <label className="text-sm font-medium text-nexora-ink">Domestic delivery fee (BDT)<input type="number" min="0" value={global.domestic_fee_bdt} onChange={(e) => updateGlobal("domestic_fee_bdt", e.target.value)} className={`mt-1.5 ${input}`} /></label>
           <label className="text-sm font-medium text-nexora-ink">International delivery fee (BDT)<input type="number" min="0" value={global.international_fee_bdt} onChange={(e) => updateGlobal("international_fee_bdt", e.target.value)} className={`mt-1.5 ${input}`} /></label>
           <label className="text-sm font-medium text-nexora-ink">Free delivery over (BDT)<input type="number" min="0" value={global.free_shipping_over_bdt} onChange={(e) => updateGlobal("free_shipping_over_bdt", e.target.value)} className={`mt-1.5 ${input}`} /></label>
           <label className="text-sm font-medium text-nexora-ink">Processing days<input type="number" min="0" max="60" value={global.processing_days} onChange={(e) => updateGlobal("processing_days", e.target.value)} className={`mt-1.5 ${input}`} /></label>
         </div>
-        <label className="flex items-center gap-3 rounded-xl border border-nexora-border bg-nexora-warm p-4 text-sm font-semibold text-nexora-ink"><input type="checkbox" checked={global.ships_international} onChange={(e) => updateGlobal("ships_international", e.target.checked)} /> Accept international delivery orders</label>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="flex items-center gap-3 rounded-xl border border-nexora-border bg-nexora-warm p-4 text-sm font-semibold text-nexora-ink"><input type="checkbox" checked={global.cod_domestic !== false} onChange={(e) => updateGlobal("cod_domestic", e.target.checked)} /> Allow domestic cash on delivery</label>
+          <label className={`flex items-center gap-3 rounded-xl border p-4 text-sm font-semibold ${global.ships_international ? "border-nexora-border bg-nexora-warm text-nexora-ink" : "border-slate-200 bg-slate-50 text-slate-400"}`}><input type="checkbox" disabled={!global.ships_international} checked={!!global.cod_international && !!global.ships_international} onChange={(e) => updateGlobal("cod_international", e.target.checked)} /> Allow international cash on delivery</label>
+        </div>
+        <label className="flex items-center gap-3 rounded-xl border border-nexora-border bg-nexora-warm p-4 text-sm font-semibold text-nexora-ink"><input type="checkbox" checked={global.ships_international} onChange={(e) => setGlobal((g) => ({ ...g, ships_international: e.target.checked, cod_international: e.target.checked ? g.cod_international : false }))} /> Accept international delivery orders</label>
         {global.ships_international && <label className="block text-sm font-medium text-nexora-ink">Allowed country codes <span className="font-normal text-nexora-muted">(comma-separated, blank = all)</span><input value={global.allowed_countries_text} onChange={(e) => updateGlobal("allowed_countries_text", e.target.value)} placeholder="US, GB, IT, FI, AU" className={`mt-1.5 ${input}`} /></label>}
+        <p className="text-xs leading-5 text-nexora-muted">International selling is opt-in. If international COD is off, overseas customers must use an available prepaid method such as Nexora Wallet.</p>
       </div>
 
       <button onClick={save} disabled={saving} className="nx-btn-primary" data-testid="save-settings">{saving ? "Saving…" : "Save all settings"}</button>

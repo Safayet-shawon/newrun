@@ -18,6 +18,7 @@ import catalog
 import smart_search
 import seller
 import seller_global
+import subscription_billing
 import commerce
 import orders
 import wallet
@@ -51,6 +52,7 @@ app.include_router(catalog.router, prefix="/api")
 app.include_router(smart_search.router, prefix="/api")
 app.include_router(seller.router, prefix="/api")
 app.include_router(seller_global.router, prefix="/api")
+app.include_router(subscription_billing.router, prefix="/api")
 app.include_router(commerce.router, prefix="/api")
 app.include_router(orders.router, prefix="/api")
 app.include_router(wallet.router, prefix="/api")
@@ -137,6 +139,7 @@ async def health_ready():
         checks["demo_seed_disabled"] = os.getenv("SEED_DEMO_DATA", "false").lower() not in {"1", "true", "yes", "on"}
         checks["dev_subscriptions_disabled"] = os.getenv("ALLOW_DEV_SUBSCRIPTIONS", "false").lower() not in {"1", "true", "yes", "on"}
         checks["jwt_secret"] = len(os.getenv("JWT_SECRET", "")) >= 32
+        checks["email"] = bool(os.getenv("SMTP_HOST") and os.getenv("SMTP_FROM")) if os.getenv("REQUIRE_EMAIL_VERIFICATION", "false").lower() in {"1", "true", "yes", "on"} else True
     ok = all(checks.values()) if checks else True
     if not ok:
         return JSONResponse({"status": "not_ready", "checks": checks}, status_code=503)

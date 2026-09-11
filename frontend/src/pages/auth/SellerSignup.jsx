@@ -35,10 +35,11 @@ export default function SellerSignup() {
         </div>
         <div className="relative">
           <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-nexora-muted" />
-          <input type="password" required minLength={6} value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} placeholder="Password (min 6 characters)" className="h-12 w-full rounded-xl border border-nexora-border pl-11 pr-4 text-sm outline-none focus:border-nexora-emerald" data-testid="seller-signup-password" />
+          <input type="password" required minLength={8} maxLength={128} value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} placeholder="Password (min 8 characters)" className="h-12 w-full rounded-xl border border-nexora-border pl-11 pr-4 text-sm outline-none focus:border-nexora-emerald" data-testid="seller-signup-password" />
         </div>
         <button disabled={loading} className="nx-btn-primary w-full" data-testid="seller-signup-submit">{loading ? "Creating…" : "Continue to onboarding"}</button>
       </form>
+      <p className="mt-3 text-xs leading-5 text-nexora-muted">Email verification can be required before protected selling and payment actions in production.</p>
       <div className="my-5 flex items-center gap-3 text-xs text-nexora-muted"><div className="h-px flex-1 bg-nexora-border" /> OR <div className="h-px flex-1 bg-nexora-border" /></div>
       <GoogleButton role="seller" label="Sign up with Google" />
       <p className="mt-6 text-center text-sm text-nexora-muted">Already selling? <Link to="/seller/login" className="font-semibold text-nexora-emerald" data-testid="to-seller-login">Seller sign in</Link></p>

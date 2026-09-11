@@ -16,6 +16,7 @@ import Storefront from "@/pages/Storefront";
 import Cart from "@/pages/Cart";
 import Wishlist from "@/pages/Wishlist";
 import Checkout from "@/pages/Checkout";
+import Legal from "@/pages/Legal";
 
 import Login from "@/pages/auth/Login";
 import Signup from "@/pages/auth/Signup";
@@ -99,6 +100,9 @@ function AppRoutes() {
       <Route path="/cart" element={M(Cart)} />
       <Route path="/wishlist" element={M(Wishlist)} />
       <Route path="/checkout" element={<RequireAuth><MarketplaceLayout><Checkout /></MarketplaceLayout></RequireAuth>} />
+      <Route path="/privacy" element={M(() => <Legal type="privacy" />)} />
+      <Route path="/terms" element={M(() => <Legal type="terms" />)} />
+      <Route path="/returns" element={M(() => <Legal type="returns" />)} />
 
       <Route path="/login" element={<Login />} />
       <Route path="/admin/login" element={<Login />} />

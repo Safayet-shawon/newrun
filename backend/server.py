@@ -6,8 +6,11 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.gzip import GZipMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from db import db
 import auth
@@ -30,6 +33,8 @@ import deep_catalog_scanner
 import catalogue_scan_gateway
 import social_store_scanner_v2
 import import_ai_v2
+import global_core
+import rate_limit
 import seed as seed_module
 import storage
 
@@ -40,7 +45,7 @@ subscription_tokens.install_seller_expiry_guard(seller)
 store_importer.scan_store_sync = deep_catalog_scanner.deep_scan_sync
 browser_store_scanner.composite_scan_sync = deep_catalog_scanner.deep_scan_sync
 
-app = FastAPI(title="NEXORA API")
+app = FastAPI(title="NEXORA API", version="1.0.0")
 
 app.include_router(auth.router, prefix="/api")
 app.include_router(catalog.router, prefix="/api")
@@ -49,6 +54,7 @@ app.include_router(seller.router, prefix="/api")
 app.include_router(commerce.router, prefix="/api")
 app.include_router(orders.router, prefix="/api")
 app.include_router(wallet.router, prefix="/api")
+app.include_router(global_core.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(admin_control.router, prefix="/api")
 app.include_router(subscription_tokens.router, prefix="/api")
@@ -62,16 +68,23 @@ app.include_router(browser_store_scanner.router, prefix="/api")
 app.include_router(import_ai_v2.router, prefix="/api")
 app.include_router(store_importer.router, prefix="/api")
 
+allowed_origins = [x.strip() for x in os.environ.get(
+    "CORS_ORIGINS",
+    "http://localhost:3000,http://127.0.0.1:3000",
+).split(",") if x.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=False,
-    allow_origins=os.environ.get(
-        "CORS_ORIGINS",
-        "http://localhost:3000,http://127.0.0.1:3000",
-    ).split(","),
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=True,
+    allow_origins=allowed_origins,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+if os.getenv("APP_ENV", "development").lower() == "production":
+    allowed_hosts = [x.strip() for x in os.getenv("ALLOWED_HOSTS", "").split(",") if x.strip()]
+    if allowed_hosts:
+        app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -80,9 +93,49 @@ logging.basicConfig(
 logger = logging.getLogger("nexora")
 
 
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(self), microphone=(), geolocation=()")
+    response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+    if os.getenv("APP_ENV", "development").lower() == "production":
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
+
+
 @app.get("/api/")
 async def root():
     return {"message": "NEXORA API online"}
+
+
+@app.get("/api/health/live")
+async def health_live():
+    return {"status": "ok"}
+
+
+@app.get("/api/health/ready")
+async def health_ready():
+    checks = {}
+    try:
+        await db.command("ping")
+        checks["database"] = True
+    except Exception:
+        checks["database"] = False
+
+    production = os.getenv("APP_ENV", "development").lower() == "production"
+    if production:
+        checks["https_frontend"] = os.getenv("FRONTEND_URL", "").startswith("https://")
+        checks["durable_storage"] = os.getenv("STORAGE_BACKEND", "local").lower() != "local"
+        checks["demo_seed_disabled"] = os.getenv("SEED_DEMO_DATA", "false").lower() not in {"1", "true", "yes", "on"}
+        checks["dev_subscriptions_disabled"] = os.getenv("ALLOW_DEV_SUBSCRIPTIONS", "false").lower() not in {"1", "true", "yes", "on"}
+        checks["jwt_secret"] = len(os.getenv("JWT_SECRET", "")) >= 32
+    ok = all(checks.values()) if checks else True
+    if not ok:
+        return JSONResponse({"status": "not_ready", "checks": checks}, status_code=503)
+    return {"status": "ready", "checks": checks}
 
 
 @app.on_event("startup")
@@ -93,6 +146,8 @@ async def startup():
         await store_importer.ensure_indexes()
         await import_ai_v2.ensure_import_categories()
         await admin_control.ensure_indexes()
+        await auth.ensure_auth_indexes()
+        await rate_limit.ensure_rate_limit_indexes()
     except Exception as e:
         logger.error(f"Index/category setup: {e}")
 

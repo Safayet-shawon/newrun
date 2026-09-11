@@ -43,6 +43,14 @@ export default function Footer() {
         ["Seller Dashboard", "/seller/dashboard"],
       ],
     },
+    {
+      title: "Policies",
+      links: [
+        ["Privacy", "/privacy"],
+        ["Marketplace Terms", "/terms"],
+        ["Returns & Refunds", "/returns"],
+      ],
+    },
   ];
 
   return (
@@ -52,8 +60,8 @@ export default function Footer() {
           {[
             [ShieldCheck, "Secure shopping", "Protected marketplace checkout"],
             [BadgeCheck, "Verified sellers", "Clear seller identity and ratings"],
-            [RotateCcw, "Easy returns", "Simple return flow on eligible orders"],
-            [Truck, "Nationwide delivery", "Built for shopping across Bangladesh"],
+            [RotateCcw, "Returns support", "Policy-based returns on eligible orders"],
+            [Truck, "Global-ready delivery", "Per-shop domestic and international rules"],
           ].map(([Icon, title, text]) => (
             <div key={title} className="flex min-w-[250px] snap-start items-center gap-3 rounded-2xl border border-[#E9DCC7] bg-white/85 px-4 py-3 shadow-sm sm:min-w-0">
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#EAF7F1] text-nexora-emerald"><Icon size={19} /></span>
@@ -63,7 +71,7 @@ export default function Footer() {
         </div>
       </div>
 
-      <div className="nx-container grid gap-8 py-10 sm:grid-cols-2 md:grid-cols-[1.5fr_1fr_1fr_1fr] md:gap-10 md:py-12">
+      <div className="nx-container grid gap-8 py-10 sm:grid-cols-2 md:grid-cols-[1.5fr_1fr_1fr] xl:grid-cols-[1.6fr_1fr_1fr_1fr_1fr] md:gap-10 md:py-12">
         <div>
           <Logo showTagline />
           <p className="mt-4 max-w-sm text-sm leading-6 text-[#5F7285]">
@@ -93,7 +101,7 @@ export default function Footer() {
 
       <div className="border-t border-[#BDD0E2] bg-[#D5E4F4] py-5">
         <div className="nx-container flex flex-col gap-2 text-xs text-[#587087] sm:flex-row sm:items-center sm:justify-between">
-          <span>© {new Date().getFullYear()} NEXORA. Built for Bangladesh.</span>
+          <span>© {new Date().getFullYear()} NEXORA. Built in Bangladesh, designed for global commerce.</span>
           <span>Products · Shops · Brands · Discovery</span>
         </div>
       </div>

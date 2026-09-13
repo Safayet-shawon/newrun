@@ -13,6 +13,7 @@ import {
   Sparkles,
   BarChart3,
   Globe2,
+  PlusCircle,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { Loader } from "@/components/shared/Bits";
@@ -66,6 +67,32 @@ export default function Overview() {
         <h1 className="text-2xl font-extrabold text-nexora-ink">Welcome back 👋</h1>
         <p className="text-sm text-nexora-muted">Here's what's happening with {shop?.name}.</p>
       </div>
+
+      <section className="grid gap-3 sm:grid-cols-3" aria-label="Quick actions">
+        <Link to="/seller/dashboard/products/new" className="group flex items-center gap-3 rounded-2xl border border-nexora-border bg-white p-4 transition hover:border-nexora-emerald/40 hover:shadow-sm">
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-nexora-mintbg text-nexora-emerald"><PlusCircle size={19} /></span>
+          <span><b className="block text-sm text-nexora-ink">Add a product</b><small className="text-nexora-muted">Create one manually</small></span>
+          <ArrowRight size={15} className="ml-auto text-nexora-muted transition group-hover:translate-x-0.5" />
+        </Link>
+        {isPro ? (
+          <Link to="/seller/dashboard/import-store" className="group flex items-center gap-3 rounded-2xl border border-nexora-emerald/25 bg-nexora-mintbg p-4 transition hover:shadow-sm">
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-white text-nexora-emerald"><Globe2 size={19} /></span>
+            <span><b className="block text-sm text-nexora-ink">Import a website</b><small className="text-nexora-muted">Scan and add products</small></span>
+            <ArrowRight size={15} className="ml-auto text-nexora-emerald transition group-hover:translate-x-0.5" />
+          </Link>
+        ) : (
+          <Link to="/seller/dashboard/subscription" className="group flex items-center gap-3 rounded-2xl border border-nexora-border bg-white p-4 transition hover:shadow-sm">
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#FFF1CC] text-[#A96D00]"><Globe2 size={19} /></span>
+            <span><b className="block text-sm text-nexora-ink">Website import</b><small className="text-nexora-muted">Available on PRO</small></span>
+            <ArrowRight size={15} className="ml-auto text-nexora-muted" />
+          </Link>
+        )}
+        <Link to="/seller/dashboard/analytics" className="group flex items-center gap-3 rounded-2xl border border-nexora-border bg-white p-4 transition hover:border-nexora-emerald/40 hover:shadow-sm">
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#EEF4FF] text-[#3B82F6]"><BarChart3 size={19} /></span>
+          <span><b className="block text-sm text-nexora-ink">Revenue report</b><small className="text-nexora-muted">Daily to yearly graphs</small></span>
+          <ArrowRight size={15} className="ml-auto text-nexora-muted transition group-hover:translate-x-0.5" />
+        </Link>
+      </section>
 
       {isStart && (
         <section className="rounded-3xl border border-nexora-border bg-gradient-to-r from-[#F8FAF9] to-white p-5 sm:p-6">

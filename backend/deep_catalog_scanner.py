@@ -33,7 +33,8 @@ CARD_SCRIPT = r"""
     )).map((x)=>x.getAttribute('content')||x.getAttribute('data-price')||x.textContent||'').join(' | ');
     const href = a.href;
     const title = (titleEl.textContent || '').replace(/\s+/g,' ').trim();
-    const image = img ? (img.currentSrc || img.src || img.getAttribute('data-src') || '') : '';
+    const srcset = img ? (img.getAttribute('data-srcset') || img.getAttribute('srcset') || '').split(',')[0].trim().split(' ')[0] : '';
+    const image = img ? (img.getAttribute('data-src') || img.getAttribute('data-lazy-src') || srcset || img.currentSrc || img.src || '') : '';
     if (href && title && priceText) out.push({href,title,priceText,image,text:text.slice(0,1800)});
   }
   return out;

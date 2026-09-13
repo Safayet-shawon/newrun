@@ -167,10 +167,15 @@ def _images(value, base_url):
         if depth > 4 or len(out) >= 12:
             return
         if isinstance(v, str):
-            u = urljoin(base_url, v.strip())
+            raw = v.strip().split(",")[0].strip().split(" ")[0]
+            if not raw or raw.startswith(("data:", "blob:")):
+                return
+            u = urljoin(base_url, raw)
+            # Values reach this helper only through known image fields. Modern CDNs
+            # frequently omit extensions, so rejecting those URLs made valid imports
+            # look incomplete.
             if u.startswith(("http://", "https://")) and u not in out:
-                if re.search(r"\.(?:jpe?g|png|webp|gif|avif)(?:\?|$)", u, re.I) or "image" in u.lower():
-                    out.append(u)
+                out.append(u)
         elif isinstance(v, dict):
             for key in ("src", "url", "secure_url", "contentUrl", "originalSrc", "original", "large", "medium", "thumbnail"):
                 if key in v:
@@ -605,12 +610,20 @@ def _public_api_products(origin, homepage_html, homepage_url):
     return _dedupe(out), checked
 
 
-def _generic(origin):
+def _generic(origin, entry_url=None):
     report = []
     homepage_html, homepage_url = _fetch_text(origin)
     report.append({"stage": "Homepage", "status": "ok", "detail": "Public homepage loaded."})
 
     products = _scan_html(homepage_html, homepage_url)
+    source_html, source_url = "", ""
+    if entry_url and _same_site(origin, entry_url) and entry_url.rstrip("/") != origin.rstrip("/"):
+        try:
+            source_html, source_url = _fetch_text(entry_url)
+            products += _scan_html(source_html, source_url)
+            report.append({"stage": "Pasted page", "status": "ok", "detail": "The exact shop/catalogue page you pasted was scanned."})
+        except HTTPException as exc:
+            report.append({"stage": "Pasted page", "status": "checked", "detail": f"The exact pasted page could not be read: {exc.detail}."})
     report.append({
         "stage": "Structured & embedded data", "status": "ok" if products else "checked",
         "detail": f"Found {len(products)} product(s) in JSON-LD, HTML metadata, or embedded app JSON.",
@@ -625,6 +638,9 @@ def _generic(origin):
     })
 
     home_links = _links(homepage_html, homepage_url, origin)
+    if source_html:
+        home_links += _links(source_html, source_url, origin)
+        home_links = list(dict.fromkeys(home_links))
     product_links = [u for u in home_links if PRODUCT_PATH_RE.search(u)]
     listing_links = [u for u in home_links if re.search(r"/(?:shop|store|collections?|category|catalog)(?:/|\?|$)", u, re.I)]
     for listing_url in listing_links[:8]:
@@ -662,7 +678,7 @@ def _generic(origin):
         "count": len(products),
     })
 
-    api_products, checked = _public_api_products(origin, homepage_html, homepage_url)
+    api_products, checked = _public_api_products(origin, homepage_html + "\n" + source_html, homepage_url)
     products = _dedupe(products + api_products)
     report.append({
         "stage": "Public app/API discovery", "status": "ok" if api_products else "checked",
@@ -675,6 +691,9 @@ def _generic(origin):
 def scan_store_sync(raw_url):
     origin = _origin(raw_url)
     _assert_public(origin)
+    entry_url = (raw_url or "").strip()
+    if not entry_url.startswith(("http://", "https://")):
+        entry_url = "https://" + entry_url
     report = []
     try:
         products = _shopify(origin)
@@ -691,7 +710,7 @@ def scan_store_sync(raw_url):
     except HTTPException:
         report.append({"stage": "WooCommerce", "status": "checked", "detail": "No public WooCommerce Store API catalogue detected."})
 
-    products, generic_report = _generic(origin)
+    products, generic_report = _generic(origin, entry_url)
     platforms = {p.get("platform") for p in products}
     if "public_api" in platforms:
         platform = "custom-api"

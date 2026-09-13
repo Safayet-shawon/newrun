@@ -55,6 +55,7 @@ export default function StoreImportV2() {
   const [scan, setScan] = useState(null);
   const [selected, setSelected] = useState(new Set());
   const [importing, setImporting] = useState(false);
+  const [publishAfterImport, setPublishAfterImport] = useState(true);
   const [manual, setManual] = useState(null);
   const [manualBusy, setManualBusy] = useState(false);
   const [chatInput, setChatInput] = useState("");
@@ -355,10 +356,17 @@ export default function StoreImportV2() {
       const { data } = await api.post("/seller/import-store/ai/import", {
         scan_id: scan.scan_id,
         product_keys: Array.from(selected),
-        publish: false,
+        publish: publishAfterImport,
       });
       toast.success(data.message);
       await loadProfile();
+      if (data.products) {
+        setScan((prev) => ({
+          ...prev,
+          products: data.products,
+          ai_summary: data.ai_summary,
+        }));
+      }
       setSelected(new Set());
     } catch (err) {
       toast.error(err.response?.data?.detail || "Import failed");
@@ -644,7 +652,12 @@ py -m playwright install chromium`}
                   Detected source: {scan.platform}
                 </p>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-col items-stretch gap-2 sm:items-end">
+                <label className="flex cursor-pointer items-center justify-end gap-2 text-xs font-semibold text-nexora-muted">
+                  <input type="checkbox" checked={publishAfterImport} onChange={(e) => setPublishAfterImport(e.target.checked)} />
+                  Publish products immediately
+                </label>
+                <div className="flex flex-wrap gap-2">
                 <button
                   onClick={toggleAll}
                   className="nx-btn-ghost"
@@ -658,8 +671,9 @@ py -m playwright install chromium`}
                   className="nx-btn-primary"
                 >
                   <Download size={15} />
-                  {importing ? "Importing..." : `Import ${selectedCount}`}
+                  {importing ? "Adding products..." : `Add ${selectedCount} to my shop`}
                 </button>
+                </div>
               </div>
             </div>
 

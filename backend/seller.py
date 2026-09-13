@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Response, Query, Header
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List
+from datetime import datetime, timezone, timedelta
 import uuid
 import os
 import re
@@ -15,6 +16,33 @@ from admin import get_dashboard_theme
 router = APIRouter()
 
 seller_dep = require_role("seller")
+
+
+def _order_total_bdt(order):
+    """Read both legacy BDT totals and the current integer-paisa order format."""
+    value = order.get("total")
+    if value is None:
+        value = float(order.get("total_paisa") or 0) / 100
+    try:
+        return round(float(value or 0), 2)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _order_datetime(value):
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def _counts_as_sale(order):
+    return str(order.get("status") or "").lower() not in {
+        "cancelled", "canceled", "refunded", "failed", "rejected"
+    }
 
 
 async def _seller_context(user: dict):
@@ -318,12 +346,14 @@ async def seller_overview(user: dict = Depends(seller_dep)):
     published = await db.products.count_documents({"shop_id": shop["id"], "status": "published"})
     low_stock = await db.products.find({"shop_id": shop["id"], "stock": {"$lte": 5}}, {"_id": 0}).limit(6).to_list(6)
     orders = await db.orders.find({"shop_id": shop["id"]}, {"_id": 0}).sort([("created_at", -1)]).limit(6).to_list(6)
-    revenue = sum(o.get("total", 0) for o in await db.orders.find({"shop_id": shop["id"]}, {"_id": 0}).to_list(1000))
+    all_orders = await db.orders.find({"shop_id": shop["id"]}, {"_id": 0}).to_list(50000)
+    sale_orders = [order for order in all_orders if _counts_as_sale(order)]
+    revenue = round(sum(_order_total_bdt(order) for order in sale_orders), 2)
     reviews_count = await db.reviews.count_documents({"shop_id": shop["id"]})
     return {
         "metrics": {
             "revenue": revenue,
-            "orders": await db.orders.count_documents({"shop_id": shop["id"]}),
+            "orders": len(sale_orders),
             "products": total_products,
             "published": published,
             "reviews": reviews_count,
@@ -333,6 +363,82 @@ async def seller_overview(user: dict = Depends(seller_dep)):
         "low_stock": low_stock,
         "shop": shop,
         "plan": get_plan(plan_id),
+    }
+
+
+@router.get("/seller/analytics")
+async def seller_analytics(
+    period: str = Query("weekly", pattern="^(daily|weekly|monthly|yearly)$"),
+    user: dict = Depends(seller_dep),
+):
+    """Return real seller order and revenue buckets for the requested period."""
+    _, shop, _, _ = await _seller_context(user)
+    if not shop:
+        return {"period": period, "series": [], "summary": {"revenue": 0, "orders": 0, "items_sold": 0, "average_order": 0}}
+
+    now = datetime.now(timezone.utc)
+    if period == "daily":
+        starts = [now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=i) for i in range(23, -1, -1)]
+        key = lambda dt: dt.strftime("%Y-%m-%d-%H")
+        label = lambda dt: dt.strftime("%H:%M")
+        cutoff = starts[0]
+    elif period == "weekly":
+        today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        starts = [today - timedelta(days=i) for i in range(6, -1, -1)]
+        key = lambda dt: dt.strftime("%Y-%m-%d")
+        label = lambda dt: dt.strftime("%a")
+        cutoff = starts[0]
+    elif period == "monthly":
+        today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        starts = [today - timedelta(days=i) for i in range(29, -1, -1)]
+        key = lambda dt: dt.strftime("%Y-%m-%d")
+        label = lambda dt: dt.strftime("%d %b")
+        cutoff = starts[0]
+    else:
+        first_this_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        starts = []
+        year, month = first_this_month.year, first_this_month.month
+        for offset in range(11, -1, -1):
+            absolute = year * 12 + (month - 1) - offset
+            starts.append(datetime(absolute // 12, absolute % 12 + 1, 1, tzinfo=timezone.utc))
+        key = lambda dt: dt.strftime("%Y-%m")
+        label = lambda dt: dt.strftime("%b")
+        cutoff = starts[0]
+
+    rows = await db.orders.find(
+        {"shop_id": shop["id"], "created_at": {"$gte": cutoff.isoformat()}},
+        {"_id": 0, "total": 1, "total_paisa": 1, "status": 1, "created_at": 1, "items": 1},
+    ).to_list(50000)
+    buckets = {key(start): {"label": label(start), "revenue": 0.0, "orders": 0, "items_sold": 0} for start in starts}
+    for order in rows:
+        if not _counts_as_sale(order):
+            continue
+        created = _order_datetime(order.get("created_at"))
+        if not created or created < cutoff:
+            continue
+        bucket = buckets.get(key(created.astimezone(timezone.utc)))
+        if not bucket:
+            continue
+        bucket["revenue"] += _order_total_bdt(order)
+        bucket["orders"] += 1
+        bucket["items_sold"] += sum(int(item.get("qty") or 0) for item in order.get("items") or [])
+
+    series = []
+    for start in starts:
+        point = buckets[key(start)]
+        point["revenue"] = round(point["revenue"], 2)
+        series.append(point)
+    revenue = round(sum(point["revenue"] for point in series), 2)
+    orders = sum(point["orders"] for point in series)
+    return {
+        "period": period,
+        "series": series,
+        "summary": {
+            "revenue": revenue,
+            "orders": orders,
+            "items_sold": sum(point["items_sold"] for point in series),
+            "average_order": round(revenue / orders, 2) if orders else 0,
+        },
     }
 
 

@@ -573,7 +573,7 @@ async def ai_import(body: AIImportBody, user: dict = Depends(seller_dep)):
 
     ent = get_entitlements(plan_id)
     current_count = await db.products.count_documents({"shop_id": shop["id"]})
-    imported, skipped = 0, []
+    imported, skipped, imported_keys = 0, [], []
     for item in candidates:
         duplicate = await _is_duplicate_at_write(shop["id"], item)
         if duplicate:
@@ -604,6 +604,7 @@ async def ai_import(body: AIImportBody, user: dict = Depends(seller_dep)):
         validate_product(doc)
         await db.products.insert_one(dict(doc))
         imported += 1
+        imported_keys.append(item.get("source_key"))
         current_count += 1
 
     if imported and scan.get("platform") != "facebook-page":
@@ -613,4 +614,30 @@ async def ai_import(body: AIImportBody, user: dict = Depends(seller_dep)):
             upsert=True,
         )
 
-    return {"ok": True, "imported": imported, "skipped": skipped, "message": f"Imported {imported} ready product(s). {len(skipped)} exact duplicate/limited item(s) skipped."}
+    if imported_keys:
+        imported_set = set(imported_keys)
+        scan_products = scan.get("products", [])
+        for item in scan_products:
+            if item.get("source_key") in imported_set:
+                item["ready"] = False
+                item["ignored"] = True
+                item["duplicate"] = True
+                item["duplicate_reason"] = "Added to your Nexora shop"
+        summary = _summary(scan_products)
+        await db.store_import_scans.update_one(
+            {"id": body.scan_id, "seller_id": user["id"]},
+            {"$set": {"products": scan_products, "ai_summary": summary, "updated_at": now_iso()}},
+        )
+    else:
+        scan_products = scan.get("products", [])
+        summary = _summary(scan_products)
+
+    return {
+        "ok": True,
+        "imported": imported,
+        "imported_keys": imported_keys,
+        "products": scan_products,
+        "ai_summary": summary,
+        "skipped": skipped,
+        "message": f"Added {imported} product(s) to your shop. {len(skipped)} duplicate or plan-limited item(s) skipped.",
+    }

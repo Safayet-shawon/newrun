@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Response, Query, Header
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional, List
+from typing import Optional, List, Literal
 from datetime import datetime, timezone, timedelta
 import uuid
 import os
@@ -49,7 +49,7 @@ async def _seller_context(user: dict):
     profile = await db.seller_profiles.find_one({"user_id": user["id"]}, {"_id": 0})
     shop = await db.shops.find_one({"seller_id": user["id"]}, {"_id": 0})
     sub = await db.subscriptions.find_one({"seller_id": user["id"]}, {"_id": 0})
-    plan_id = sub["plan"] if sub and sub.get("status") in ("active", "active_dev") else "start"
+    plan_id = sub["plan"] if sub and sub.get("status") in ("active", "active_dev") else "free"
     return profile, shop, sub, plan_id
 
 
@@ -76,11 +76,18 @@ class OnboardingBody(BaseModel):
     shop_name: str
     shop_slug: str
     description: Optional[str] = ""
+    courier_provider: Literal["steadfast", "pathao"] = "steadfast"
+    pickup_contact_name: str = Field(min_length=2, max_length=80)
+    pickup_phone: str = Field(min_length=10, max_length=20)
+    pickup_address: str = Field(min_length=8, max_length=300)
+    pickup_area: str = Field(min_length=2, max_length=100)
+    pickup_city: str = Field(min_length=2, max_length=100)
+    pickup_postal_code: Optional[str] = Field(default="", max_length=20)
 
 
 @router.post("/seller/onboarding")
 async def seller_onboarding(body: OnboardingBody, user: dict = Depends(seller_dep)):
-    plan_id = body.plan if body.plan in PLANS else "start"
+    plan_id = body.plan if body.plan in PLANS else "free"
     slug = body.shop_slug.lower().strip().replace(" ", "-")
     existing = await db.shops.find_one({"slug": slug})
     if existing and existing.get("seller_id") != user["id"]:
@@ -95,6 +102,16 @@ async def seller_onboarding(body: OnboardingBody, user: dict = Depends(seller_de
             "business_name": body.business_name,
             "phone": body.phone,
             "category": body.category,
+            "delivery_setup": {
+                "provider": body.courier_provider,
+                "pickup_contact_name": body.pickup_contact_name.strip(),
+                "pickup_phone": body.pickup_phone.strip(),
+                "pickup_address": body.pickup_address.strip(),
+                "pickup_area": body.pickup_area.strip(),
+                "pickup_city": body.pickup_city.strip(),
+                "pickup_postal_code": (body.pickup_postal_code or "").strip(),
+                "connection_status": "pending_connection",
+            },
             "onboarding_complete": True,
             "updated_at": now_iso(),
         }, "$setOnInsert": {"id": new_id("sp_"), "user_id": user["id"], "created_at": now_iso()}},
@@ -134,9 +151,10 @@ async def seller_onboarding(body: OnboardingBody, user: dict = Depends(seller_de
         }
         await db.shops.insert_one(dict(shop))
 
+    subscription_status = "active" if plan_id == "free" else ("active_dev" if os.getenv("ALLOW_DEV_SUBSCRIPTIONS", "false").lower() == "true" else "pending")
     await db.subscriptions.update_one(
         {"seller_id": user["id"]},
-        {"$set": {"plan": plan_id, "status": "active_dev" if os.getenv("ALLOW_DEV_SUBSCRIPTIONS", "false").lower() == "true" else "pending", "updated_at": now_iso()},
+        {"$set": {"plan": plan_id, "status": subscription_status, "updated_at": now_iso()},
          "$setOnInsert": {"id": new_id("sub_"), "seller_id": user["id"], "started_at": now_iso()}},
         upsert=True,
     )
@@ -163,6 +181,39 @@ class ShopUpdate(BaseModel):
     social_links: Optional[dict] = None
     contact: Optional[dict] = None
     policies: Optional[dict] = None
+
+
+class DeliverySetupUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    provider: Literal["steadfast", "pathao"]
+    pickup_contact_name: str = Field(min_length=2, max_length=80)
+    pickup_phone: str = Field(min_length=10, max_length=20)
+    pickup_address: str = Field(min_length=8, max_length=300)
+    pickup_area: str = Field(min_length=2, max_length=100)
+    pickup_city: str = Field(min_length=2, max_length=100)
+    pickup_postal_code: Optional[str] = Field(default="", max_length=20)
+
+
+@router.put("/seller/delivery-setup")
+async def update_delivery_setup(body: DeliverySetupUpdate, user: dict = Depends(seller_dep)):
+    delivery_setup = {
+        **body.model_dump(),
+        "pickup_contact_name": body.pickup_contact_name.strip(),
+        "pickup_phone": body.pickup_phone.strip(),
+        "pickup_address": body.pickup_address.strip(),
+        "pickup_area": body.pickup_area.strip(),
+        "pickup_city": body.pickup_city.strip(),
+        "pickup_postal_code": (body.pickup_postal_code or "").strip(),
+        "connection_status": "pending_connection",
+        "updated_at": now_iso(),
+    }
+    result = await db.seller_profiles.update_one(
+        {"user_id": user["id"]},
+        {"$set": {"delivery_setup": delivery_setup, "updated_at": now_iso()}},
+    )
+    if not result.matched_count:
+        raise HTTPException(400, "Complete seller onboarding first")
+    return delivery_setup
 
 
 @router.put("/seller/shop")
@@ -487,9 +538,10 @@ class PlanChange(BaseModel):
 async def change_subscription(body: PlanChange, user: dict = Depends(seller_dep)):
     if body.plan not in PLANS:
         raise HTTPException(status_code=400, detail="Invalid plan")
+    subscription_status = "active" if body.plan == "free" else ("active_dev" if os.getenv("ALLOW_DEV_SUBSCRIPTIONS", "false").lower() == "true" else "pending")
     await db.subscriptions.update_one(
         {"seller_id": user["id"]},
-        {"$set": {"plan": body.plan, "status": "active_dev" if os.getenv("ALLOW_DEV_SUBSCRIPTIONS", "false").lower() == "true" else "pending", "updated_at": now_iso()},
+        {"$set": {"plan": body.plan, "status": subscription_status, "updated_at": now_iso()},
          "$setOnInsert": {"id": new_id("sub_"), "seller_id": user["id"], "started_at": now_iso()}},
         upsert=True,
     )

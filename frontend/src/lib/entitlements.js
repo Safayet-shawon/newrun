@@ -1,11 +1,12 @@
 // Frontend mirror of backend entitlements for instant UI gating.
 export const PLAN_META = {
+  free: { id: "free", name: "FREE", price: 0, color: "#0F8A68", tagline: "Try Nexora" },
   start: { id: "start", name: "START", price: 500, color: "#66736B", tagline: "Start selling" },
   grow: { id: "grow", name: "GROW", price: 1500, color: "#10B981", tagline: "Grow your business" },
   pro: { id: "pro", name: "PRO", price: 3000, color: "#F59E0B", tagline: "Nexora Intelligence" },
 };
 
-export const PLAN_ORDER = ["start", "grow", "pro"];
+export const PLAN_ORDER = ["free", "start", "grow", "pro"];
 
 export function planRank(plan) {
   return PLAN_ORDER.indexOf(plan);
@@ -62,5 +63,5 @@ export function requiredPlanFor(feature) {
   ];
   if (pro.includes(feature)) return "pro";
   if (grow.includes(feature)) return "grow";
-  return "start";
+  return "free";
 }

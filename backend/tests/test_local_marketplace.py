@@ -24,7 +24,7 @@ def context():
     customer,ch=register('customer')
     seller,sh=register('seller')
     other,oh=register('seller')
-    r=requests.post(API+'/seller/onboarding',headers=sh,json={'business_name':'Regression Shop','category':'fashion','plan':'start','shop_name':'Regression Shop','shop_slug':'test-'+suffix})
+    r=requests.post(API+'/seller/onboarding',headers=sh,json={'business_name':'Regression Shop','phone':'01700000000','category':'fashion','plan':'start','shop_name':'Regression Shop','shop_slug':'test-'+suffix,'courier_provider':'steadfast','pickup_contact_name':'Regression Seller','pickup_phone':'01700000000','pickup_address':'House 1, Road 2','pickup_area':'Dhanmondi','pickup_city':'Dhaka'})
     assert r.status_code==200,r.text
     requests.post(API+'/seller/shop/publish',headers=sh).raise_for_status()
     payload={'title':'Regression Shirt '+suffix,'category':'fashion','price':100,'stock':3,'status':'published','product_type':'apparel','variants':[{'name':'Size','options':['M','L']}],'variant_inventory':[{'options':{'Size':'M'},'price':120,'stock':2},{'options':{'Size':'L'},'stock':1}]}
@@ -156,7 +156,7 @@ def test_admin_can_edit_three_seller_dashboard_themes(context):
     database.users.update_one({'id':result['user']['id']},{'$set':{'role':'admin','is_test':True}})
     themes=requests.get(API+'/admin/seller-dashboard-themes',headers=headers)
     assert themes.status_code==200,themes.text
-    assert [theme['plan_id'] for theme in themes.json()]==['start','grow','pro']
+    assert [theme['plan_id'] for theme in themes.json()]==['free','start','grow','pro']
     owner_paths=['overview','orders','customers','sellers','products','categories','finance','platform-settings','audit-log']
     for path in owner_paths:
         assert requests.get(API+'/admin/'+path,headers=context['ch']).status_code==403
@@ -165,7 +165,7 @@ def test_admin_can_edit_three_seller_dashboard_themes(context):
     overview=requests.get(API+'/admin/overview',headers=headers).json()
     assert {'gross_revenue_bdt','orders','customers','sellers','shops','products'} <= set(overview['metrics'])
     settings=requests.get(API+'/admin/platform-settings',headers=headers).json()
-    assert set(settings['plans'])=={'start','grow','pro'}
+    assert set(settings['plans'])=={'free','start','grow','pro'}
     assert settings['delivery']['credential_configured'] is False
     try:
         updated={k:v for k,v in themes.json()[0].items() if k in {'name','description','primary_color','sidebar_color','sidebar_text_color','accent_color','surface_color','text_color','border_radius','font_family'}}
@@ -181,5 +181,3 @@ def test_admin_can_edit_three_seller_dashboard_themes(context):
             database.seller_dashboard_themes.replace_one({'plan_id':'start'},original,upsert=True)
         else:
             database.seller_dashboard_themes.delete_one({'plan_id':'start'})
-
-

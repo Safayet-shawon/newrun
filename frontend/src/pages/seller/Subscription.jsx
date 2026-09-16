@@ -105,7 +105,7 @@ export default function Subscription() {
         <p className="text-2xl font-extrabold text-nexora-ink">{plan.name} · {money(plan.price_bdt)}/mo</p>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
         {plans.map((p) => {
           const isCurrent = p.id === plan.id;
           const isSelected = p.id === selectedPlan;
@@ -115,7 +115,8 @@ export default function Subscription() {
             <div key={p.id} className={`relative flex flex-col rounded-3xl border p-6 ${isSelected ? "border-nexora-emerald ring-2 ring-nexora-emerald/20" : p.recommended ? "border-nexora-emerald/50" : "border-nexora-border"} bg-white`}>
               {p.recommended && <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-nexora-emerald px-3 py-1 text-xs font-bold text-white">MOST POPULAR</span>}
               <p className="text-sm font-bold text-nexora-muted">{p.name}</p>
-              <p className="mt-1 text-3xl font-extrabold text-nexora-ink">{money(p.price_bdt)}<span className="text-sm font-medium text-nexora-muted">/mo</span></p>
+              <p className="mt-1 text-3xl font-extrabold text-nexora-ink">{p.price_bdt ? money(p.price_bdt) : "Free"}{p.price_bdt > 0 && <span className="text-sm font-medium text-nexora-muted">/mo</span>}</p>
+              <p className="mt-1 text-xs font-semibold text-nexora-emerald">{p.commission_percent}% marketplace commission</p>
               <p className="mt-1 text-sm text-nexora-muted">{p.tagline}</p>
               <ul className="mt-4 flex-1 space-y-2">
                 {features[p.id]?.map((f) => <li key={f} className="flex gap-2 text-sm text-nexora-ink"><Check size={16} className="mt-0.5 shrink-0 text-nexora-emerald" /> {f}</li>)}

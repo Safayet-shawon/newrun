@@ -9,10 +9,11 @@ import { toast } from "sonner";
 const currencies = ["BDT", "USD", "EUR", "GBP", "AUD", "CAD", "SGD", "JPY", "INR"];
 
 export default function Settings() {
-  const { shop, ent, reload } = useSeller();
+  const { shop, profile, ent, reload } = useSeller();
   const { user } = useAuth();
   const [form, setForm] = useState(null);
   const [global, setGlobal] = useState(null);
+  const [delivery, setDelivery] = useState(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -20,10 +21,22 @@ export default function Settings() {
   }, [shop]);
 
   useEffect(() => {
+    if (profile) setDelivery(profile.delivery_setup || {
+      provider: "steadfast",
+      pickup_contact_name: profile.business_name || shop?.name || "",
+      pickup_phone: profile.phone || shop?.contact?.phone || "",
+      pickup_address: "",
+      pickup_area: "",
+      pickup_city: "",
+      pickup_postal_code: "",
+    });
+  }, [profile, shop]);
+
+  useEffect(() => {
     api.get("/seller/global-settings").then(({ data }) => setGlobal({ ...data, allowed_countries_text: (data.allowed_countries || []).join(", ") })).catch(() => {});
   }, []);
 
-  if (!form || !global) return <Loader />;
+  if (!form || !global || !delivery) return <Loader />;
 
   const save = async () => {
     setSaving(true);
@@ -41,6 +54,15 @@ export default function Settings() {
           processing_days: Number(global.processing_days || 0),
           cod_domestic: !!global.cod_domestic,
           cod_international: !!global.cod_international,
+        }),
+        api.put("/seller/delivery-setup", {
+          provider: delivery.provider,
+          pickup_contact_name: delivery.pickup_contact_name,
+          pickup_phone: delivery.pickup_phone,
+          pickup_address: delivery.pickup_address,
+          pickup_area: delivery.pickup_area,
+          pickup_city: delivery.pickup_city,
+          pickup_postal_code: delivery.pickup_postal_code || "",
         }),
       ]);
       await reload();
@@ -64,6 +86,19 @@ export default function Settings() {
         <div><label className="mb-1.5 block text-sm font-medium text-nexora-ink">Shop name</label><input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className={input} data-testid="settings-name" /></div>
         <div><label className="mb-1.5 block text-sm font-medium text-nexora-ink">Shop URL</label><input value={`nexora.com/shop/${shop.slug}`} disabled className="h-11 w-full rounded-xl border border-nexora-border bg-nexora-warm px-4 text-sm text-nexora-muted" /></div>
         <div><label className="mb-1.5 block text-sm font-medium text-nexora-ink">Support phone</label><input value={form.contact?.phone || ""} onChange={(e) => setForm((f) => ({ ...f, contact: { ...f.contact, phone: e.target.value } }))} className={input} data-testid="settings-phone" /></div>
+      </div>
+
+      <div className="space-y-4 rounded-2xl border border-nexora-border bg-white p-6">
+        <div><h3 className="font-bold text-nexora-ink">Courier &amp; pickup point</h3><p className="mt-1 text-sm text-nexora-muted">New parcel bookings will use this saved pickup point.</p></div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="text-sm font-medium text-nexora-ink">Courier<select value={delivery.provider} onChange={(e) => setDelivery((d) => ({ ...d, provider: e.target.value }))} className={`mt-1.5 ${input}`}><option value="steadfast">Steadfast</option><option value="pathao">Pathao</option></select></label>
+          <label className="text-sm font-medium text-nexora-ink">Pickup contact<input value={delivery.pickup_contact_name} onChange={(e) => setDelivery((d) => ({ ...d, pickup_contact_name: e.target.value }))} className={`mt-1.5 ${input}`} /></label>
+          <label className="text-sm font-medium text-nexora-ink">Pickup phone<input value={delivery.pickup_phone} onChange={(e) => setDelivery((d) => ({ ...d, pickup_phone: e.target.value }))} className={`mt-1.5 ${input}`} /></label>
+          <label className="text-sm font-medium text-nexora-ink">City / district<input value={delivery.pickup_city} onChange={(e) => setDelivery((d) => ({ ...d, pickup_city: e.target.value }))} className={`mt-1.5 ${input}`} /></label>
+          <label className="text-sm font-medium text-nexora-ink">Area / thana<input value={delivery.pickup_area} onChange={(e) => setDelivery((d) => ({ ...d, pickup_area: e.target.value }))} className={`mt-1.5 ${input}`} /></label>
+          <label className="text-sm font-medium text-nexora-ink">Postal code<input value={delivery.pickup_postal_code || ""} onChange={(e) => setDelivery((d) => ({ ...d, pickup_postal_code: e.target.value }))} className={`mt-1.5 ${input}`} /></label>
+        </div>
+        <label className="block text-sm font-medium text-nexora-ink">Full pickup address<textarea value={delivery.pickup_address} onChange={(e) => setDelivery((d) => ({ ...d, pickup_address: e.target.value }))} rows={3} className="mt-1.5 w-full rounded-xl border border-nexora-border p-4 text-sm outline-none focus:border-nexora-emerald" /></label>
       </div>
 
       <div className="space-y-4 rounded-2xl border border-nexora-border bg-white p-6">

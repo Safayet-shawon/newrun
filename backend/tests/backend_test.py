@@ -292,9 +292,10 @@ class TestSeller:
         r = client.get(f"{API}/subscriptions/plans")
         assert r.status_code == 200
         d = r.json()
-        assert [p["id"] for p in d["plans"]] == ["start", "grow", "pro"]
-        assert [p["price_bdt"] for p in d["plans"]] == [500, 1500, 3000]
-        assert set(d["features"].keys()) == {"start", "grow", "pro"}
+        assert [p["id"] for p in d["plans"]] == ["free", "start", "grow", "pro"]
+        assert [p["price_bdt"] for p in d["plans"]] == [0, 500, 1500, 3000]
+        assert [p["commission_percent"] for p in d["plans"]] == [10, 7, 5, 3]
+        assert set(d["features"].keys()) == {"free", "start", "grow", "pro"}
 
     def test_shop_update_and_publish(self, client, seller_token):
         orig = client.get(f"{API}/seller/me", headers=h(seller_token)).json()["shop"]

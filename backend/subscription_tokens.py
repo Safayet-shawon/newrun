@@ -34,12 +34,12 @@ async def ensure_indexes():
 
 
 async def seller_context_with_expiry(user: dict):
-    profile = await db.seller_profiles.find_one({"user_id": user["id"]}, {"_id": 0}); shop = await db.shops.find_one({"seller_id": user["id"]}, {"_id": 0}); sub = await db.subscriptions.find_one({"seller_id": user["id"]}, {"_id": 0}); plan_id = "start"
+    profile = await db.seller_profiles.find_one({"user_id": user["id"]}, {"_id": 0}); shop = await db.shops.find_one({"seller_id": user["id"]}, {"_id": 0}); sub = await db.subscriptions.find_one({"seller_id": user["id"]}, {"_id": 0}); plan_id = "free"
     if sub and sub.get("status") in ("active", "active_dev"):
         expiry = parse_iso(sub.get("expires_at"))
         if expiry and expiry <= utcnow():
             await db.subscriptions.update_one({"id": sub["id"]}, {"$set": {"status": "expired", "updated_at": now_iso()}}); sub["status"] = "expired"
-        else: plan_id = sub.get("plan", "start")
+        else: plan_id = sub.get("plan", "free")
     return profile, shop, sub, plan_id
 
 

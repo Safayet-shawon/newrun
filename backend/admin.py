@@ -11,6 +11,7 @@ admin_dep = require_role("admin")
 PLAN_IDS = tuple(PLAN_ORDER)
 
 DEFAULT_DASHBOARD_THEMES = {
+    "free": {"plan_id":"free","name":"Launchpad","description":"A simple workspace for first-time sellers.","primary_color":"#0F8A68","sidebar_color":"#FFFFFF","sidebar_text_color":"#33443C","accent_color":"#5EE2B8","surface_color":"#F7FAF8","text_color":"#17211B","border_radius":12,"font_family":"sans"},
     "start": {"plan_id":"start","name":"Essential","description":"A clean dashboard for new shops.","primary_color":"#6A4FD6","sidebar_color":"#FFFFFF","sidebar_text_color":"#1E1B2E","accent_color":"#A893F0","surface_color":"#FBFBFA","text_color":"#1E1B2E","border_radius":12,"font_family":"sans"},
     "grow": {"plan_id":"grow","name":"Growth","description":"A focused workspace for growing catalogues.","primary_color":"#5139AD","sidebar_color":"#211B36","sidebar_text_color":"#F7F5FA","accent_color":"#C4B5FD","surface_color":"#F7F5FA","text_color":"#1E1B2E","border_radius":14,"font_family":"modern"},
     "pro": {"plan_id":"pro","name":"Professional","description":"A premium workspace for established sellers.","primary_color":"#8B5CF6","sidebar_color":"#181426","sidebar_text_color":"#F8F7FC","accent_color":"#F0ABFC","surface_color":"#F8F7FC","text_color":"#161322","border_radius":16,"font_family":"serif"},
@@ -48,7 +49,7 @@ class DeliverySetting(BaseModel):
     api_base_url:str=Field(default="",max_length=300); credential_reference:str=Field(default="",max_length=80,pattern=r"^[A-Za-z0-9_]*$")
 class PlatformSettingsUpdate(BaseModel):
     model_config=ConfigDict(extra="forbid")
-    commission_percent:float=Field(ge=0,le=50); plans:dict[Literal["start","grow","pro"],PlanSetting]; delivery:DeliverySetting
+    commission_percent:float=Field(ge=0,le=50); plans:dict[Literal["free","start","grow","pro"],PlanSetting]; delivery:DeliverySetting
 
 @router.get("/admin/overview")
 async def overview(user=Depends(admin_dep)):
@@ -128,7 +129,7 @@ async def platform_settings(user=Depends(admin_dep)):
     settings=await get_platform_settings(); settings["plan_features"]=PLAN_FEATURES; settings["delivery"]["credential_configured"]=bool(settings["delivery"].get("credential_reference")); return settings
 @router.put("/admin/platform-settings")
 async def update_platform_settings(body:PlatformSettingsUpdate,user=Depends(admin_dep)):
-    if set(body.plans)!=set(PLAN_IDS): raise HTTPException(422,"START, GROW and PRO plan settings are required")
+    if set(body.plans)!=set(PLAN_IDS): raise HTTPException(422,"FREE, START, GROW and PRO plan settings are required")
     data=body.model_dump()
     for plan in data["plans"].values(): plan["billing_enabled"]=False
     data.update({"id":"owner","updated_at":now_iso(),"updated_by":user["id"]})

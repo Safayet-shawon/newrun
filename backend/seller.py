@@ -374,6 +374,39 @@ class BulkBody(BaseModel):
     action: str  # publish | unpublish | delete
 
 
+class SellerOrderAction(BaseModel):
+    action: Literal["confirm", "packed", "ready_for_pickup"]
+
+
+@router.post("/seller/orders/{order_id}/action")
+async def seller_order_action(order_id: str, body: SellerOrderAction, user: dict = Depends(seller_dep)):
+    profile, shop, _, _ = await _seller_context(user)
+    if not shop:
+        raise HTTPException(400, "Complete onboarding first")
+    order = await db.orders.find_one({"id": order_id, "seller_id": user["id"]}, {"_id": 0})
+    if not order:
+        raise HTTPException(404, "Order not found")
+    transitions = {"confirm": ({"pending"}, "confirmed"), "packed": ({"confirmed", "processing"}, "packed"), "ready_for_pickup": ({"packed"}, "ready_for_pickup")}
+    allowed, next_status = transitions[body.action]
+    if order.get("status") == next_status:
+        return order
+    if order.get("status") not in allowed:
+        raise HTTPException(409, f"Order cannot move from {order.get('status')} to {next_status}")
+    update = {"status": next_status, "updated_at": now_iso()}
+    if body.action == "ready_for_pickup":
+        delivery = (profile or {}).get("delivery_setup") or {}
+        required = ("provider", "pickup_contact_name", "pickup_phone", "pickup_address", "pickup_area", "pickup_city")
+        if any(not str(delivery.get(key, "")).strip() for key in required):
+            raise HTTPException(409, "Complete courier and pickup settings before requesting pickup")
+        shipment = await db.shipments.find_one({"order_id": order_id}, {"_id": 0})
+        if not shipment:
+            shipment = {"id": new_id("ship_"), "order_id": order_id, "seller_id": user["id"], "provider": delivery["provider"], "pickup": {key: delivery.get(key) for key in required if key != "provider"}, "status": "awaiting_courier_connection", "tracking_code": None, "timeline": [{"status": "ready_for_pickup", "label": "Seller marked parcel ready", "at": now_iso()}], "created_at": now_iso(), "updated_at": now_iso()}
+            await db.shipments.insert_one(dict(shipment))
+        update.update({"shipment_id": shipment["id"], "courier_status": shipment["status"]})
+    await db.orders.update_one({"id": order_id, "seller_id": user["id"]}, {"$set": update})
+    return await db.orders.find_one({"id": order_id}, {"_id": 0})
+
+
 @router.post("/seller/products/bulk")
 async def bulk_action(body: BulkBody, user: dict = Depends(seller_dep)):
     _, shop, _, plan_id = await _seller_context(user)
@@ -498,7 +531,13 @@ async def seller_orders(user: dict = Depends(seller_dep)):
     _, shop, _, _ = await _seller_context(user)
     if not shop:
         return []
-    return await db.orders.find({"shop_id": shop["id"]}, {"_id": 0}).sort([("created_at", -1)]).to_list(200)
+    orders = await db.orders.find({"shop_id": shop["id"]}, {"_id": 0}).sort([("created_at", -1)]).to_list(200)
+    shipment_ids = [order.get("shipment_id") for order in orders if order.get("shipment_id")]
+    shipments = await db.shipments.find({"id": {"$in": shipment_ids}}, {"_id": 0}).to_list(200) if shipment_ids else []
+    by_id = {shipment["id"]: shipment for shipment in shipments}
+    for order in orders:
+        order["shipment"] = by_id.get(order.get("shipment_id"))
+    return orders
 
 
 @router.get("/seller/reviews")

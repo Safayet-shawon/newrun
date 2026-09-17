@@ -164,7 +164,6 @@ async def startup():
         await auth.ensure_auth_indexes()
         await rate_limit.ensure_rate_limit_indexes()
         await conversational_commerce.ensure_indexes()
-        await commerce_hardening.ensure_indexes()
     except Exception as e:
         logger.error(f"Index/category setup: {e}")
 

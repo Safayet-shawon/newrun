@@ -11,13 +11,8 @@ from order_workflows import COURIER_TRANSITIONS, RETURN_TRANSITIONS, require_tra
 from seller import normalize_shop_slug
 from storage import validate_image_bytes
 from subscription_billing import SubscriptionPaymentBody, subscription_period
-from production_ops import (
-    CourierConnectionBody,
-    _credential_payload,
-    _decrypt_json,
-    _encrypt_json,
-    _safe_provider_status,
-)
+from production_ops import CourierConnectionBody, _credential_payload, _decrypt_json, _encrypt_json
+from courier_status import normalize as normalize_courier_status
 
 
 def image_bytes(image_format="PNG", size=(20, 10)):
@@ -115,10 +110,11 @@ def test_courier_credentials_are_encrypted_and_provider_scoped(monkeypatch):
 
 
 def test_courier_status_normalization():
-    assert _safe_provider_status("pathao", {"data": {"order_status": "Delivered"}}) == "delivered"
-    assert _safe_provider_status("steadfast", {"delivery_status": "in_transit"}) == "in_transit"
-    assert _safe_provider_status("redx", {"data": {"parcel_status": "Returned to merchant"}}) == "returned"
-    assert _safe_provider_status("redx", {"status": "pickup pending"}) == "pickup_requested"
+    assert normalize_courier_status({"data": {"order_status": "Delivered"}}) == "delivered"
+    assert normalize_courier_status({"delivery_status": "in_transit"}) == "in_transit"
+    assert normalize_courier_status({"data": {"parcel_status": "Returned to merchant"}}) == "returned"
+    assert normalize_courier_status({"status": "pickup pending"}) == "pickup_requested"
+    assert normalize_courier_status({"status": "picked up by rider"}) == "picked_up"
 
 
 def test_store_import_has_one_public_scan_gateway():

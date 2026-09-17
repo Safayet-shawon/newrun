@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Copy, Link2, MessageCircle, Plus, Send, Settings2, ShoppingBag, Smartphone, Trash2 } from "lucide-react";
 import { api, formatApiError } from "@/lib/api";
 import { Loader } from "@/components/shared/Bits";
@@ -21,7 +21,7 @@ export default function UnifiedInbox() {
   const [checkoutNote, setCheckoutNote] = useState("");
   const [latestLink, setLatestLink] = useState("");
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       const [{ data: c }, { data: v }, { data: p }] = await Promise.all([
         api.get("/seller/inbox/connections"),
@@ -31,13 +31,13 @@ export default function UnifiedInbox() {
       setConnections(c);
       setConversations(v);
       setProducts(p.items || []);
-      if (!selectedId && v[0]?.id) setSelectedId(v[0].id);
+      setSelectedId((current) => current || v[0]?.id || "");
     } catch (e) {
       toast.error(formatApiError(e));
     }
-  };
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
     if (!selectedId) { setThread(null); return; }

@@ -41,6 +41,7 @@ import seed as seed_module
 import storage
 import fraud_shield
 import conversational_commerce
+import commerce_hardening
 
 subscription_tokens.install_seller_expiry_guard(seller)
 
@@ -52,6 +53,8 @@ app = FastAPI(title="NEXORA API", version="1.0.0")
 app.include_router(auth.router, prefix="/api")
 app.include_router(catalog.router, prefix="/api")
 app.include_router(smart_search.router, prefix="/api")
+# Guarded routes must be registered before the original seller/Meta routes.
+app.include_router(commerce_hardening.router, prefix="/api")
 app.include_router(seller.router, prefix="/api")
 app.include_router(seller_global.router, prefix="/api")
 app.include_router(subscription_billing.router, prefix="/api")

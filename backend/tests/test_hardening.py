@@ -11,6 +11,13 @@ from order_workflows import COURIER_TRANSITIONS, RETURN_TRANSITIONS, require_tra
 from seller import normalize_shop_slug
 from storage import validate_image_bytes
 from subscription_billing import SubscriptionPaymentBody, subscription_period
+from production_ops import (
+    CourierConnectionBody,
+    _credential_payload,
+    _decrypt_json,
+    _encrypt_json,
+    _safe_provider_status,
+)
 
 
 def image_bytes(image_format="PNG", size=(20, 10)):
@@ -97,6 +104,23 @@ def test_pending_subscription_has_free_entitlement():
     assert get_effective_plan_id({"plan": "pro", "status": "pending_payment"}) == "free"
 
 
+def test_courier_credentials_are_encrypted_and_provider_scoped(monkeypatch):
+    monkeypatch.setenv("INTEGRATION_ENCRYPTION_SECRET", "test-secret-that-is-long-enough-for-regression")
+    secret = {"api_key": "merchant-key", "secret_key": "merchant-secret"}
+    encrypted = _encrypt_json(secret)
+    assert "merchant-key" not in encrypted and "merchant-secret" not in encrypted
+    assert _decrypt_json(encrypted) == secret
+    body = CourierConnectionBody(api_key="merchant-key", secret_key="merchant-secret", password="must-not-leak")
+    assert _credential_payload("steadfast", body) == secret
+
+
+def test_courier_status_normalization():
+    assert _safe_provider_status("pathao", {"data": {"order_status": "Delivered"}}) == "delivered"
+    assert _safe_provider_status("steadfast", {"delivery_status": "in_transit"}) == "in_transit"
+    assert _safe_provider_status("redx", {"data": {"parcel_status": "Returned to merchant"}}) == "returned"
+    assert _safe_provider_status("redx", {"status": "pickup pending"}) == "pickup_requested"
+
+
 def test_store_import_has_one_public_scan_gateway():
     from server import app
 
@@ -105,3 +129,15 @@ def test_store_import_has_one_public_scan_gateway():
     assert list(paths["/api/seller/import-store/manual/start"]) == ["post"]
     assert "/api/seller/import-store/scan/legacy" not in paths
     assert "/api/seller/import-store/scan/browser-legacy" not in paths
+
+
+def test_production_commerce_routes_are_exposed():
+    from server import app
+
+    paths = app.openapi()["paths"]
+    assert "post" in paths["/api/seller/integrations/couriers/book/{order_id}"]
+    assert "post" in paths["/api/seller/integrations/couriers/track/{order_id}"]
+    assert "get" in paths["/api/order-verification/{token}"]
+    assert "post" in paths["/api/order-verification/{token}"]
+    assert "get" in paths["/api/seller/settlements"]
+    assert "post" in paths["/api/seller/growth/connectors/{source_type}/sync"]

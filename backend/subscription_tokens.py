@@ -5,7 +5,7 @@ import os, re
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from db import db, new_id, now_iso
+from db import db, client, new_id, now_iso
 from security import require_role
 from entitlements import PLANS, PLAN_ORDER, PLAN_FEATURES, get_plan, get_entitlements
 from admin import audit, get_platform_settings
@@ -111,8 +111,8 @@ async def token_status(token_id: str, body: TokenStatusBody, user=Depends(admin_
 async def token_redemptions(token_id: str, user=Depends(admin_dep)): return await db.subscription_token_redemptions.find({"token_id": token_id}, {"_id": 0}).sort([("redeemed_at", -1)]).to_list(3000)
 
 
-async def token_quote(code: str, plan: str, seller_id: str):
-    token = await db.subscription_tokens.find_one({"code": normalize(code)}, {"_id": 0})
+async def token_quote(code: str, plan: str, seller_id: str, session=None):
+    token = await db.subscription_tokens.find_one({"code": normalize(code)}, {"_id": 0}, session=session)
     if not token: raise HTTPException(404, "Invalid subscription token")
     if not token.get("is_active"): raise HTTPException(400, "This token has been disabled")
     if plan not in token.get("applicable_plans", []): raise HTTPException(400, "This token is not valid for this plan")
@@ -120,7 +120,7 @@ async def token_quote(code: str, plan: str, seller_id: str):
     if deadline and deadline <= utcnow(): raise HTTPException(400, "This token has expired")
     if token.get("max_uses") is not None and token.get("used_count", 0) >= token["max_uses"]: raise HTTPException(400, "This token has reached its usage limit")
     if token.get("per_seller_limit") is not None:
-        used = await db.subscription_token_redemptions.count_documents({"token_id": token["id"], "seller_id": seller_id})
+        used = await db.subscription_token_redemptions.count_documents({"token_id": token["id"], "seller_id": seller_id}, session=session)
         if used >= token["per_seller_limit"]: raise HTTPException(400, "You have reached your usage limit for this token")
     settings = await get_platform_settings(); price = float(settings["plans"][plan]["price_bdt"])
     if token["token_type"] == "free_access": discount = price
@@ -129,20 +129,20 @@ async def token_quote(code: str, plan: str, seller_id: str):
     return {"token": token, "plan": plan, "original_price_bdt": round(price, 2), "discount_bdt": round(discount, 2), "payable_bdt": round(max(0, price - discount), 2)}
 
 
-async def consume_token(quote: dict, seller_id: str, shop_id: Optional[str], require_active=True):
+async def consume_token(quote: dict, seller_id: str, shop_id: Optional[str], require_active=True, session=None):
     token = quote["token"]
     if token.get("per_seller_limit") is not None:
-        used = await db.subscription_token_redemptions.count_documents({"token_id": token["id"], "seller_id": seller_id})
+        used = await db.subscription_token_redemptions.count_documents({"token_id": token["id"], "seller_id": seller_id}, session=session)
         if used >= token["per_seller_limit"]: raise HTTPException(409, "Seller token limit reached")
     query = {"id": token["id"]}
     if require_active: query["is_active"] = True
     if token.get("max_uses") is not None: query["used_count"] = {"$lt": token["max_uses"]}
-    result = await db.subscription_tokens.update_one(query, {"$inc": {"used_count": 1}, "$set": {"updated_at": now_iso()}})
+    result = await db.subscription_tokens.update_one(query, {"$inc": {"used_count": 1}, "$set": {"updated_at": now_iso()}}, session=session)
     if not result.matched_count: raise HTTPException(409, "Token is no longer available")
     red = {"id": new_id("redeem_"), "token_id": token["id"], "token_code": token["code"], "seller_id": seller_id, "shop_id": shop_id,
            "plan": quote["plan"], "token_type": token["token_type"], "original_price_bdt": quote["original_price_bdt"],
            "discount_bdt": quote["discount_bdt"], "payable_bdt": quote["payable_bdt"], "free_access_days": token.get("free_access_days"), "redeemed_at": now_iso()}
-    await db.subscription_token_redemptions.insert_one(dict(red)); return red
+    await db.subscription_token_redemptions.insert_one(dict(red), session=session); return red
 
 
 async def rollback_redemption(red):
@@ -171,21 +171,45 @@ async def preview(body: TokenPreviewBody, user=Depends(seller_dep)):
 
 @router.post("/seller/subscription-token/redeem")
 async def redeem(body: TokenPreviewBody, user=Depends(seller_dep)):
-    q = await token_quote(body.code, body.plan, user["id"]); token = q["token"]; shop = await db.shops.find_one({"seller_id": user["id"]}, {"_id": 0}); dev = os.getenv("ALLOW_DEV_SUBSCRIPTIONS", "false").lower() == "true"
+    q = await token_quote(body.code, body.plan, user["id"])
+    token = q["token"]
+    shop = await db.shops.find_one({"seller_id": user["id"]}, {"_id": 0})
+    dev = os.getenv("ALLOW_DEV_SUBSCRIPTIONS", "false").lower() == "true"
     current = await db.subscriptions.find_one({"seller_id": user["id"]}, {"_id": 0})
     current_expiry = parse_iso((current or {}).get("expires_at"))
     active = bool(current and current.get("status") in {"active", "active_dev"} and (not current_expiry or current_expiry > utcnow()))
     if active and PLAN_ORDER.index(body.plan) < PLAN_ORDER.index(current.get("plan", "free")):
         raise HTTPException(409, "Downgrades must be scheduled for period end; a token cannot shorten an active plan")
+
     if token["token_type"] == "discount" and not dev:
         pending = {"plan": body.plan, "pending_token_id": token["id"], "pending_token_code": token["code"], "original_price_bdt": q["original_price_bdt"], "discount_bdt": q["discount_bdt"], "payable_bdt": q["payable_bdt"], "subscription_source": "discount_token"}
         updates = {"pending_purchase": pending, "updated_at": now_iso()} if active else {**pending, "plan": body.plan, "status": "pending_payment", "updated_at": now_iso()}
         await db.subscriptions.update_one({"seller_id": user["id"]}, {"$set": updates, "$setOnInsert": {"id": new_id("sub_"), "seller_id": user["id"], "started_at": now_iso(), "created_at": now_iso()}}, upsert=True)
         return {"ok": True, "status": "pending_payment", "requires_payment": True, "plan": get_plan(body.plan), **{k: q[k] for k in ("original_price_bdt", "discount_bdt", "payable_bdt")}, "token": {"code": token["code"], "token_type": token["token_type"]}}
-    red = await consume_token(q, user["id"], (shop or {}).get("id")); now = utcnow(); same_plan = bool(active and current.get("plan") == body.plan and current_expiry); start = current_expiry if same_plan else now; expiry = start + timedelta(days=int(token["free_access_days"])) if token["token_type"] == "free_access" else start + timedelta(days=30); status = "active" if token["token_type"] == "free_access" else "active_dev"
-    try:
-        old = await db.subscriptions.find_one({"seller_id": user["id"]}, {"_id": 0}); sub_id = (old or {}).get("id") or new_id("sub_")
-        await db.subscriptions.update_one({"seller_id": user["id"]}, {"$set": {"id": sub_id, "plan": body.plan, "status": status, "started_at": (old or {}).get("started_at") or start.isoformat(), "current_period_started_at": start.isoformat(), "expires_at": expiry.isoformat(), "token_id": token["id"], "token_code": token["code"], "original_price_bdt": q["original_price_bdt"], "discount_bdt": q["discount_bdt"], "payable_bdt": q["payable_bdt"], "amount_paid": q["payable_bdt"], "subscription_source": "free_access_token" if token["token_type"] == "free_access" else "discount_token", "updated_at": now_iso()}, "$setOnInsert": {"created_at": now_iso()}}, upsert=True)
-    except Exception:
-        await rollback_redemption(red); raise
-    return {"ok": True, "status": status, "requires_payment": False, "plan": get_plan(body.plan), "entitlements": get_entitlements(body.plan), **{k: q[k] for k in ("original_price_bdt", "discount_bdt", "payable_bdt")}, "expires_at": expiry.isoformat(), "token": {"code": token["code"], "token_type": token["token_type"], "free_access_days": token.get("free_access_days")}}
+
+    async def commit(session):
+        tx_quote = await token_quote(body.code, body.plan, user["id"], session=session)
+        tx_token = tx_quote["token"]
+        latest = await db.subscriptions.find_one({"seller_id": user["id"]}, {"_id": 0}, session=session)
+        now = utcnow()
+        latest_expiry = parse_iso((latest or {}).get("expires_at"))
+        latest_active = bool(latest and latest.get("status") in {"active", "active_dev"} and (not latest_expiry or latest_expiry > now))
+        if latest_active and PLAN_ORDER.index(body.plan) < PLAN_ORDER.index(latest.get("plan", "free")):
+            raise HTTPException(409, "Downgrades must be scheduled for period end; a token cannot shorten an active plan")
+
+        await consume_token(tx_quote, user["id"], (shop or {}).get("id"), session=session)
+        same_plan = bool(latest_active and latest.get("plan") == body.plan and latest_expiry)
+        start = latest_expiry if same_plan else now
+        expiry = start + timedelta(days=int(tx_token["free_access_days"])) if tx_token["token_type"] == "free_access" else start + timedelta(days=30)
+        status = "active" if tx_token["token_type"] == "free_access" else "active_dev"
+        sub_id = (latest or {}).get("id") or new_id("sub_")
+        await db.subscriptions.update_one(
+            {"seller_id": user["id"]},
+            {"$set": {"id": sub_id, "plan": body.plan, "status": status, "started_at": (latest or {}).get("started_at") or start.isoformat(), "current_period_started_at": start.isoformat(), "expires_at": expiry.isoformat(), "token_id": tx_token["id"], "token_code": tx_token["code"], "original_price_bdt": tx_quote["original_price_bdt"], "discount_bdt": tx_quote["discount_bdt"], "payable_bdt": tx_quote["payable_bdt"], "amount_paid": tx_quote["payable_bdt"], "subscription_source": "free_access_token" if tx_token["token_type"] == "free_access" else "discount_token", "updated_at": now_iso()}, "$setOnInsert": {"created_at": now_iso()}},
+            upsert=True,
+            session=session,
+        )
+        return {"ok": True, "status": status, "requires_payment": False, "plan": get_plan(body.plan), "entitlements": get_entitlements(body.plan), **{k: tx_quote[k] for k in ("original_price_bdt", "discount_bdt", "payable_bdt")}, "expires_at": expiry.isoformat(), "token": {"code": tx_token["code"], "token_type": tx_token["token_type"], "free_access_days": tx_token.get("free_access_days")}}
+
+    async with await client.start_session() as session:
+        return await session.with_transaction(commit)

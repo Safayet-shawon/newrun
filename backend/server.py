@@ -42,6 +42,7 @@ import storage
 import fraud_shield
 import conversational_commerce
 import commerce_hardening
+import growth_os
 
 subscription_tokens.install_seller_expiry_guard(seller)
 
@@ -55,6 +56,7 @@ app.include_router(catalog.router, prefix="/api")
 app.include_router(smart_search.router, prefix="/api")
 # Guarded routes must be registered before the original seller/Meta routes.
 app.include_router(commerce_hardening.router, prefix="/api")
+app.include_router(growth_os.router, prefix="/api")
 app.include_router(seller.router, prefix="/api")
 app.include_router(seller_global.router, prefix="/api")
 app.include_router(subscription_billing.router, prefix="/api")
@@ -164,6 +166,7 @@ async def startup():
         await auth.ensure_auth_indexes()
         await rate_limit.ensure_rate_limit_indexes()
         await conversational_commerce.ensure_indexes()
+        await growth_os.ensure_indexes()
     except Exception as e:
         logger.error(f"Index/category setup: {e}")
 

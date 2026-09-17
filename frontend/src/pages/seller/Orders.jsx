@@ -18,9 +18,13 @@ export default function Orders() {
   const [orders, setOrders] = useState(null);
   const [busy, setBusy] = useState("");
   useEffect(() => {
-    api.get("/seller/risk/orders?limit=200&rescan=true")
-      .then(({ data }) => setOrders(data))
-      .catch(() => api.get("/seller/orders").then(({ data }) => setOrders(data)));
+    Promise.all([
+      api.get("/seller/risk/orders?limit=200&rescan=true"),
+      api.get("/seller/orders"),
+    ]).then(([riskResult, orderResult]) => {
+      const operational = new Map((orderResult.data || []).map((row) => [row.id, row]));
+      setOrders((riskResult.data || []).map((row) => ({ ...operational.get(row.id), ...row, return_request: operational.get(row.id)?.return_request })));
+    }).catch(() => api.get("/seller/orders").then(({ data }) => setOrders(data)));
   }, []);
   if (!orders) return <Loader />;
 

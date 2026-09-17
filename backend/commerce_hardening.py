@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 import conversational_commerce
 import seller
+import growth_os
 from db import db, new_id, now_iso
 from security import require_role
 
@@ -103,13 +104,21 @@ async def guarded_seller_order_action(
     if body.action == "confirm":
         order = await db.orders.find_one(
             {"id": order_id, "seller_id": user["id"]},
-            {"_id": 0, "risk_hold": 1, "risk_review_status": 1},
+            {"_id": 0},
         )
         if not order:
             raise HTTPException(404, "Order not found")
+        order = await growth_os.ensure_order_decision(order)
         if order.get("risk_hold"):
             raise HTTPException(
                 409,
                 "This order is on Fraud Shield review hold. Approve or dismiss the risk review before confirming it.",
+            )
+        if order.get("operational_hold"):
+            decision = order.get("fraud_decision") or {}
+            action = str(decision.get("action") or "verification").replace("_", " ")
+            raise HTTPException(
+                409,
+                f"Growth OS requires {action} before this order can be confirmed.",
             )
     return await seller.seller_order_action(order_id, body, user)

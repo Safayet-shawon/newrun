@@ -11,11 +11,13 @@ import deep_catalog_scanner
 import store_importer
 import connector_execution
 import production_ops
+import courier_status
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("nexora.worker")
 
 store_importer.scan_store_sync = deep_catalog_scanner.deep_scan_sync
+production_ops._safe_provider_status = lambda provider, payload: courier_status.normalize(payload)
 
 
 async def main():

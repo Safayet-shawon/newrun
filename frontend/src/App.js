@@ -17,6 +17,7 @@ import Cart from "@/pages/Cart";
 import Wishlist from "@/pages/Wishlist";
 import Checkout from "@/pages/Checkout";
 import Legal from "@/pages/Legal";
+import InstantCheckout from "@/pages/InstantCheckout";
 
 import Login from "@/pages/auth/Login";
 import Signup from "@/pages/auth/Signup";
@@ -53,6 +54,8 @@ import ReviewsPage from "@/pages/seller/ReviewsPage";
 import Analytics from "@/pages/seller/Analytics";
 import Intelligence from "@/pages/seller/IntelligenceV2";
 import StoreImport from "@/pages/seller/StoreImportV2";
+import UnifiedInbox from "@/pages/seller/UnifiedInbox";
+import RiskCenter from "@/pages/seller/RiskCenter";
 import Settings from "@/pages/seller/Settings";
 import Notifications from "@/pages/seller/Notifications";
 
@@ -100,6 +103,7 @@ function AppRoutes() {
       <Route path="/cart" element={M(Cart)} />
       <Route path="/wishlist" element={M(Wishlist)} />
       <Route path="/checkout" element={<RequireAuth><MarketplaceLayout><Checkout /></MarketplaceLayout></RequireAuth>} />
+      <Route path="/c/:token" element={<InstantCheckout />} />
       <Route path="/privacy" element={M(() => <Legal type="privacy" />)} />
       <Route path="/terms" element={M(() => <Legal type="terms" />)} />
       <Route path="/returns" element={M(() => <Legal type="returns" />)} />
@@ -132,6 +136,8 @@ function AppRoutes() {
       <Route path="/seller/dashboard" element={<RequireAuth role="seller"><SellerLayout /></RequireAuth>}>
         <Route index element={<Overview />} />
         <Route path="orders" element={<Orders />} />
+        <Route path="inbox" element={<UnifiedInbox />} />
+        <Route path="risk-center" element={<RiskCenter />} />
         <Route path="products" element={<Products />} />
         <Route path="products/new" element={<ProductForm />} />
         <Route path="products/:id/edit" element={<ProductForm />} />

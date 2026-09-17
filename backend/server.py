@@ -39,6 +39,8 @@ import global_core
 import rate_limit
 import seed as seed_module
 import storage
+import fraud_shield
+import conversational_commerce
 
 subscription_tokens.install_seller_expiry_guard(seller)
 
@@ -62,6 +64,8 @@ app.include_router(admin_control.router, prefix="/api")
 app.include_router(subscription_tokens.router, prefix="/api")
 app.include_router(owner_admin.router, prefix="/api")
 app.include_router(seller_intelligence_v2.router, prefix="/api")
+app.include_router(fraud_shield.router, prefix="/api")
+app.include_router(conversational_commerce.router, prefix="/api")
 
 # Route order is intentional.
 app.include_router(catalogue_scan_gateway.router, prefix="/api")
@@ -156,6 +160,7 @@ async def startup():
         await admin_control.ensure_indexes()
         await auth.ensure_auth_indexes()
         await rate_limit.ensure_rate_limit_indexes()
+        await conversational_commerce.ensure_indexes()
     except Exception as e:
         logger.error(f"Index/category setup: {e}")
 

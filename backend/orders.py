@@ -14,6 +14,7 @@ from global_core import shipping_for_shop, normalize_country
 from admin import get_platform_settings
 from accounting import order_accounting_snapshot
 from entitlements import get_effective_plan_id
+import fraud_shield
 
 router = APIRouter()
 
@@ -122,6 +123,18 @@ async def quote_order(body: CheckoutBody, user: dict = Depends(get_current_user)
     return quote
 
 
+async def _attach_risk(result: dict) -> dict:
+    enriched = []
+    for snapshot in result.get("orders") or []:
+        current = await db.orders.find_one({"id": snapshot.get("id")}, {"_id": 0}) or snapshot
+        try:
+            current = await fraud_shield.scan_and_store(current)
+        except Exception:
+            current = {**current, "risk_scan_pending": True}
+        enriched.append(current)
+    return {**result, "orders": enriched}
+
+
 @router.post("/checkout")
 async def checkout(body: CheckoutBody, user: dict = Depends(get_current_user)):
     identity = {"customer_id": user["id"], "key": body.idempotency_key}
@@ -130,7 +143,7 @@ async def checkout(body: CheckoutBody, user: dict = Depends(get_current_user)):
     if previous:
         if previous["digest"] != digest:
             raise HTTPException(409, "Checkout key was already used for a different order")
-        return {"orders": previous["orders"], "skipped": [], "replayed": True}
+        return await _attach_risk({"orders": previous["orders"], "skipped": [], "replayed": True})
 
     async def commit(session):
         quote, address, stocks, variants, inventory = await build_quote(body, user, session)
@@ -202,11 +215,12 @@ async def checkout(body: CheckoutBody, user: dict = Depends(get_current_user)):
 
     try:
         async with await client.start_session() as session:
-            return await session.with_transaction(commit)
+            result = await session.with_transaction(commit)
+        return await _attach_risk(result)
     except DuplicateKeyError:
         previous = await db.checkouts.find_one(identity, {"_id": 0})
         if previous and previous["digest"] == digest:
-            return {"orders": previous["orders"], "skipped": [], "replayed": True}
+            return await _attach_risk({"orders": previous["orders"], "skipped": [], "replayed": True})
         raise HTTPException(409, "An order is already being submitted. Check your order history.")
     except OperationFailure as error:
         if error.code in (20, 303):

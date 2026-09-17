@@ -6,6 +6,7 @@ from PIL import Image
 from pydantic import ValidationError
 
 from accounting import order_accounting_snapshot
+from entitlements import get_effective_plan_id, get_plan
 from order_workflows import COURIER_TRANSITIONS, RETURN_TRANSITIONS, require_transition
 from seller import normalize_shop_slug
 from storage import validate_image_bytes
@@ -66,6 +67,34 @@ def test_subscription_period_policy():
     assert upgrade == "upgrade" and start == now and upgraded_until == now + timedelta(days=30)
     with pytest.raises(ValueError, match="Downgrades"):
         subscription_period({"plan": "pro", "status": "active", "expires_at": expiry.isoformat()}, "start", now)
+
+
+def test_unknown_plan_fails_safe_to_free():
+    assert get_plan("invalid-plan")["id"] == "free"
+
+
+def test_expired_subscription_has_free_effective_plan():
+    now = datetime(2026, 9, 17, tzinfo=timezone.utc)
+    subscription = {
+        "plan": "pro",
+        "status": "active",
+        "expires_at": "2026-09-16T00:00:00+00:00",
+    }
+    assert get_effective_plan_id(subscription, now) == "free"
+
+
+def test_valid_active_subscription_keeps_plan():
+    now = datetime(2026, 9, 17, tzinfo=timezone.utc)
+    subscription = {
+        "plan": "pro",
+        "status": "active",
+        "expires_at": "2026-10-17T00:00:00+00:00",
+    }
+    assert get_effective_plan_id(subscription, now) == "pro"
+
+
+def test_pending_subscription_has_free_entitlement():
+    assert get_effective_plan_id({"plan": "pro", "status": "pending_payment"}) == "free"
 
 
 def test_store_import_has_one_public_scan_gateway():

@@ -28,7 +28,7 @@ export default function AuthCallback() {
         setTimeout(() => navigate("/login", { replace: true }), 2000);
       }
     })();
-  }, []);
+  }, [googleAuth, location.hash, location.search, navigate]);
 
   return (
     <div className="min-h-screen bg-nexora-warm">

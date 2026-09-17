@@ -48,10 +48,10 @@ export function AuthProvider({ children }) {
     return applyAuth(data);
   };
 
-  const googleAuth = async (session_id, role) => {
+  const googleAuth = useCallback(async (session_id, role) => {
     const { data } = await api.post("/auth/google", { session_id, role });
     return applyAuth(data);
-  };
+  }, [applyAuth]);
 
   const logout = () => {
     api.post("/auth/logout").catch(() => {});

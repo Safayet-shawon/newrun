@@ -1,0 +1,78 @@
+from io import BytesIO
+from datetime import datetime, timedelta, timezone
+
+import pytest
+from PIL import Image
+from pydantic import ValidationError
+
+from accounting import order_accounting_snapshot
+from order_workflows import COURIER_TRANSITIONS, RETURN_TRANSITIONS, require_transition
+from seller import normalize_shop_slug
+from storage import validate_image_bytes
+from subscription_billing import SubscriptionPaymentBody, subscription_period
+
+
+def image_bytes(image_format="PNG", size=(20, 10)):
+    output = BytesIO()
+    Image.new("RGB", size, "navy").save(output, format=image_format)
+    return output.getvalue()
+
+
+def test_shop_slug_normalization_and_reserved_names():
+    assert normalize_shop_slug("  My Great Shop!! ") == "my-great-shop"
+    assert normalize_shop_slug("one---two") == "one-two"
+    for value in ("api", "admin-tools", "x", "---"):
+        with pytest.raises(ValueError):
+            normalize_shop_slug(value)
+
+
+def test_upload_validation_uses_image_content():
+    assert validate_image_bytes(image_bytes(), "photo.png", "image/png") == ("png", "image/png")
+    with pytest.raises(ValueError, match="extension"):
+        validate_image_bytes(image_bytes(), "photo.jpg", "image/jpeg")
+    with pytest.raises(ValueError, match="valid supported image"):
+        validate_image_bytes(b"not-an-image", "photo.png", "image/png")
+
+
+def test_order_accounting_snapshot_is_non_settling_and_plan_based():
+    row = order_accounting_snapshot({"subtotal_paisa": 100_00, "delivery_paisa": 60_00}, "grow", {})
+    assert row["platform_commission_paisa"] == 500
+    assert row["seller_net_paisa"] == 15_500
+    assert row["settlement_status"] == "not_settled"
+
+
+def test_order_workflow_transitions_reject_skips():
+    assert require_transition("requested", "approved", RETURN_TRANSITIONS, "Return") == "approved"
+    assert require_transition("picked_up", "in_transit", COURIER_TRANSITIONS, "Shipment") == "in_transit"
+    with pytest.raises(ValueError):
+        require_transition("requested", "refunded", RETURN_TRANSITIONS, "Return")
+    with pytest.raises(ValueError):
+        require_transition("awaiting_courier_connection", "delivered", COURIER_TRANSITIONS, "Shipment")
+
+
+def test_subscription_payment_requires_retry_key():
+    valid = SubscriptionPaymentBody(plan="grow", idempotency_key="payment-attempt-0001")
+    assert valid.plan == "grow"
+    with pytest.raises(ValidationError):
+        SubscriptionPaymentBody(plan="grow", idempotency_key="short")
+
+
+def test_subscription_period_policy():
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    expiry = now + timedelta(days=10)
+    renewal, start, renewed_until = subscription_period({"plan": "grow", "status": "active", "expires_at": expiry.isoformat()}, "grow", now)
+    assert renewal == "renewal" and start == expiry and renewed_until == expiry + timedelta(days=30)
+    upgrade, start, upgraded_until = subscription_period({"plan": "start", "status": "active", "expires_at": expiry.isoformat()}, "grow", now)
+    assert upgrade == "upgrade" and start == now and upgraded_until == now + timedelta(days=30)
+    with pytest.raises(ValueError, match="Downgrades"):
+        subscription_period({"plan": "pro", "status": "active", "expires_at": expiry.isoformat()}, "start", now)
+
+
+def test_store_import_has_one_public_scan_gateway():
+    from server import app
+
+    paths = app.openapi()["paths"]
+    assert list(paths["/api/seller/import-store/scan"]) == ["post"]
+    assert list(paths["/api/seller/import-store/manual/start"]) == ["post"]
+    assert "/api/seller/import-store/scan/legacy" not in paths
+    assert "/api/seller/import-store/scan/browser-legacy" not in paths

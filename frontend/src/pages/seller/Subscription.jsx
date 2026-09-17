@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { Check, Sparkles, TicketPercent, X } from "lucide-react";
+import React, { useCallback, useEffect, useState } from "react";
+import { Check, Sparkles, TicketPercent, Wallet, X } from "lucide-react";
 import { api, formatApiError } from "@/lib/api";
 import { Loader } from "@/components/shared/Bits";
 import { useSeller } from "@/context/SellerContext";
@@ -17,11 +17,19 @@ export default function Subscription() {
   const [tokenCode, setTokenCode] = useState("");
   const [quote, setQuote] = useState(null);
   const [checking, setChecking] = useState(false);
+  const [billing, setBilling] = useState(null);
+  const [paymentKey, setPaymentKey] = useState("");
+
+  const loadBilling = useCallback(async () => {
+    const { data } = await api.get("/seller/subscription/billing");
+    setBilling(data);
+  }, []);
 
   useEffect(() => {
-    api.get("/seller/subscription-plans").then(({ data }) => {
-      setPlans(data.plans);
-      setFeatures(data.features);
+    Promise.all([api.get("/seller/subscription-plans"), api.get("/seller/subscription/billing")]).then(([plansResult, billingResult]) => {
+      setPlans(plansResult.data.plans);
+      setFeatures(plansResult.data.features);
+      setBilling(billingResult.data);
     }).catch((e) => toast.error(formatApiError(e)));
   }, []);
 
@@ -34,6 +42,7 @@ export default function Subscription() {
     setSelectedPlan(id);
     setQuote(null);
     setTokenCode("");
+    setPaymentKey(crypto.randomUUID());
   };
 
   const applyToken = async () => {
@@ -65,25 +74,33 @@ export default function Subscription() {
     setChanging(selectedPlan);
     try {
       let data;
-      if (quote) {
+      const isDowngrade = planRank(selectedPlan) < currentRank;
+      if (isDowngrade) {
+        const res = await api.put("/seller/subscription/scheduled-change", { plan: selectedPlan });
+        data = res.data;
+        toast.success(`${selectedPlan.toUpperCase()} scheduled for ${new Date(data.effective_at).toLocaleDateString()}`);
+      } else if (quote) {
         const res = await api.post("/seller/subscription-token/redeem", {
           code: quote.code,
           plan: selectedPlan,
         });
         data = res.data;
         if (data.requires_payment) {
-          toast.success(`Token accepted. Pay ${money(data.payable_bdt)} to activate.`);
+          const paid = await api.post("/seller/subscription/pay-wallet", { plan: selectedPlan, idempotency_key: paymentKey || crypto.randomUUID() });
+          data = paid.data;
+          toast.success(`${selectedPlan.toUpperCase()} activated. ${money(data.amount_paid_bdt)} paid from wallet.`);
         } else if (data.token?.token_type === "free_access") {
           toast.success(`${selectedPlan.toUpperCase()} activated free until ${new Date(data.expires_at).toLocaleDateString()}`);
         } else {
           toast.success(`${selectedPlan.toUpperCase()} activated with ${quote.code}`);
         }
       } else {
-        const res = await api.post("/seller/subscription", { plan: selectedPlan });
+        const res = await api.post("/seller/subscription/pay-wallet", { plan: selectedPlan, idempotency_key: paymentKey || crypto.randomUUID() });
         data = res.data;
-        toast.success(`Switched to ${selectedPlan.toUpperCase()} plan`);
+        toast.success(`${selectedPlan.toUpperCase()} ${data.transition === "renewal" ? "renewed" : "activated"}. ${money(data.amount_paid_bdt)} paid from wallet.`);
       }
-      await reload();
+      await Promise.all([reload(), loadBilling()]);
+      setSelectedPlan("");
     } catch (e) {
       toast.error(formatApiError(e));
     } finally {
@@ -103,6 +120,9 @@ export default function Subscription() {
       <div className="rounded-2xl border border-nexora-emerald/30 bg-nexora-mintbg p-5">
         <p className="text-xs font-semibold uppercase tracking-wide text-nexora-muted">Current plan</p>
         <p className="text-2xl font-extrabold text-nexora-ink">{plan.name} · {money(plan.price_bdt)}/mo</p>
+        <p className="mt-2 flex items-center gap-2 text-sm text-nexora-muted"><Wallet size={16} /> Wallet balance: <b className="text-nexora-ink">{money((billing?.wallet_balance_paisa || 0) / 100)}</b></p>
+        {billing?.subscription?.status === "pending_payment" && <p className="mt-2 text-sm font-semibold text-amber-700">Payment pending—your paid plan is not active yet.</p>}
+        {billing?.subscription?.scheduled_plan && <p className="mt-2 text-sm font-semibold text-amber-700">{billing.subscription.scheduled_plan.toUpperCase()} is scheduled for {new Date(billing.subscription.scheduled_for).toLocaleDateString()}.</p>}
       </div>
 
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
@@ -140,7 +160,7 @@ export default function Subscription() {
               <h2 className="text-lg font-extrabold text-nexora-ink">Confirm {selected.name}</h2>
               <p className="mt-1 text-sm text-nexora-muted">Regular price: {money(selected.price_bdt)}/month</p>
 
-              <div className="mt-5">
+              {selected.id !== "free" && <div className="mt-5">
                 <p className="mb-2 flex items-center gap-2 text-sm font-bold text-nexora-ink"><TicketPercent size={17} /> Have a subscription token?</p>
                 <div className="flex max-w-lg gap-2">
                   <input
@@ -154,7 +174,7 @@ export default function Subscription() {
                   </button>
                   {quote && <button onClick={clearToken} className="rounded-xl border border-nexora-border px-3"><X size={16}/></button>}
                 </div>
-              </div>
+              </div>}
 
               {quote && (
                 <div className="mt-4 max-w-lg rounded-2xl border border-nexora-emerald/30 bg-nexora-mintbg p-4">
@@ -185,8 +205,9 @@ export default function Subscription() {
               <div className="my-3 border-t border-nexora-border" />
               <div className="flex justify-between"><b>Payable</b><b className="text-xl">{money(quote?.payable_bdt ?? selected.price_bdt)}</b></div>
               <button onClick={activate} disabled={changing === selectedPlan} className="mt-5 w-full rounded-xl bg-nexora-emerald py-3 text-sm font-bold text-white hover:bg-nexora-emeraldDark">
-                {changing === selectedPlan ? "Processing..." : quote?.token_type === "free_access" ? "Activate Free Access" : "Continue"}
+                {changing === selectedPlan ? "Processing..." : planRank(selectedPlan) < currentRank ? "Schedule at period end" : quote?.token_type === "free_access" ? "Activate Free Access" : `Pay ${money(quote?.payable_bdt ?? selected.price_bdt)} from wallet`}
               </button>
+              {planRank(selectedPlan) >= currentRank && selectedPlan !== "free" && <p className="mt-2 text-center text-xs text-nexora-muted">Wallet payment is atomic and safe to retry. Upgrades start now; renewals extend your expiry.</p>}
             </div>
           </div>
         </section>

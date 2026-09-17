@@ -18,6 +18,9 @@ node_modules/
 
 # Testing
 /coverage
+/test_result.md
+/test_reports/**/*.json
+/test_reports/**/*.xml
 
 # Next.js
 /.next/
@@ -55,6 +58,7 @@ __pycache__/
 *pyc*
 venv/
 .venv/
+.deps/
 
 # Development tools
 chainlit.md

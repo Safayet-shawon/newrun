@@ -9,7 +9,7 @@ import re
 from typing import List, Optional
 from urllib.parse import urlparse, urlunparse
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from db import db, new_id, now_iso
@@ -17,6 +17,7 @@ from entitlements import get_entitlements
 from product_rules import validate_product
 from security import require_role
 import store_importer
+from rate_limit import check_rate_limit
 
 router = APIRouter()
 seller_dep = require_role("seller")
@@ -315,7 +316,8 @@ def _summary(products):
 
 
 @router.post("/seller/import-store/ai/prepare/{scan_id}")
-async def prepare(scan_id: str, user: dict = Depends(seller_dep)):
+async def prepare(scan_id: str, request: Request, user: dict = Depends(seller_dep)):
+    await check_rate_limit(request, action="catalogue-ai-prepare", limit=20, window_seconds=3600, identity=user["id"])
     await store_importer._require_import(user)
     return await prepare_scan(scan_id, user["id"])
 
@@ -425,7 +427,8 @@ def _extract_command_keyword(lower):
 
 
 @router.post("/seller/import-store/ai/chat")
-async def assistant_chat(body: ChatBody, user: dict = Depends(seller_dep)):
+async def assistant_chat(body: ChatBody, request: Request, user: dict = Depends(seller_dep)):
+    await check_rate_limit(request, action="catalogue-ai-chat", limit=60, window_seconds=3600, identity=user["id"])
     await store_importer._require_import(user)
     scan = await db.store_import_scans.find_one({"id": body.scan_id, "seller_id": user["id"]}, {"_id": 0})
     if not scan:
@@ -559,7 +562,8 @@ async def _is_duplicate_at_write(shop_id, item):
 
 
 @router.post("/seller/import-store/ai/import")
-async def ai_import(body: AIImportBody, user: dict = Depends(seller_dep)):
+async def ai_import(body: AIImportBody, request: Request, user: dict = Depends(seller_dep)):
+    await check_rate_limit(request, action="catalogue-import-write", limit=12, window_seconds=3600, identity=user["id"])
     _, shop, _, plan_id = await store_importer._require_import(user)
     scan = await db.store_import_scans.find_one({"id": body.scan_id, "seller_id": user["id"]}, {"_id": 0})
     if not scan:

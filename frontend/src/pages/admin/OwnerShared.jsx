@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { api, formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -21,7 +21,7 @@ export function Empty({ children = "No records found." }) {
 
 export function useGet(path) {
   const [data, setData] = useState(null);
-  const load = () => api.get(path).then((r) => setData(r.data)).catch((e) => toast.error(formatApiError(e)));
-  useEffect(() => { load(); }, [path]);
+  const load = useCallback(() => api.get(path).then((r) => setData(r.data)).catch((e) => toast.error(formatApiError(e))), [path]);
+  useEffect(() => { load(); }, [load]);
   return [data, load];
 }

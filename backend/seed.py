@@ -127,8 +127,8 @@ SHOPS = [
 ]
 
 DEMO_USERS = [
-    ("customer@nexora.com", "customer123", "Ayesha Rahman", "customer"),
-    ("seller@nexora.com", "seller123", "Karim Hossain", "seller"),
+    ("customer@nexora.com", "DEMO_CUSTOMER_PASSWORD", "Ayesha Rahman", "customer"),
+    ("seller@nexora.com", "DEMO_SELLER_PASSWORD", "Karim Hossain", "seller"),
 ]
 
 REVIEW_TEXTS = [
@@ -149,7 +149,10 @@ async def _ensure_users():
             "password_hash": hash_password(admin_pw), "role": "admin", "picture": None,
             "auth_provider": "password", "created_at": now_iso(),
         })
-    for email, pw, name, role in DEMO_USERS:
+    for email, password_env, name, role in DEMO_USERS:
+        pw = os.getenv(password_env, "")
+        if len(pw) < 12:
+            raise RuntimeError(f"{password_env} must be set to at least 12 characters when SEED_DEMO_DATA=true")
         if not await db.users.find_one({"email": email}):
             await db.users.insert_one({
                 "id": new_id("user_"), "email": email, "name": name,
@@ -187,7 +190,7 @@ async def seed():
             else:
                 u = {
                     "id": new_id("user_"), "email": email, "name": f"{name} Owner",
-                    "password_hash": hash_password("seller123"), "role": "seller", "picture": None,
+                    "password_hash": hash_password(os.environ["DEMO_SELLER_PASSWORD"]), "role": "seller", "picture": None,
                     "auth_provider": "password", "created_at": now_iso(),
                 }
                 await db.users.insert_one(dict(u))
@@ -288,6 +291,9 @@ async def ensure_indexes():
 
     await db.checkouts.create_index([("customer_id", 1), ("key", 1)], unique=True)
     await db.orders.create_index("id", unique=True)
+    await db.order_accounting.create_index("order_id", unique=True)
+    await db.return_requests.create_index("order_id", unique=True)
+    await db.subscription_payments.create_index([("seller_id", 1), ("idempotency_key", 1)], unique=True)
     await db.wallets.create_index([("user_id", 1), ("mode", 1)], unique=True)
     await db.wallet_deposits.create_index("id", unique=True)
     await db.wallet_deposits.create_index([("user_id", 1), ("mode", 1), ("key", 1)], unique=True)

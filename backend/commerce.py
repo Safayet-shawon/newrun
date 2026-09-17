@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, ConfigDict, Field
 from typing import List, Optional
+from datetime import datetime, timezone, timedelta
 
 from db import db, new_id, now_iso
 from security import get_current_user, optional_user
@@ -148,7 +149,52 @@ async def delete_address(address_id: str, user: dict = Depends(get_current_user)
 
 @router.get("/account/orders")
 async def get_orders(user: dict = Depends(get_current_user)):
-    return await db.orders.find({"customer_id": user["id"]}, {"_id": 0}).sort([("created_at", -1)]).to_list(200)
+    orders = await db.orders.find({"customer_id": user["id"]}, {"_id": 0}).sort([("created_at", -1)]).to_list(200)
+    rows = await db.return_requests.find({"customer_id": user["id"], "order_id": {"$in": [o["id"] for o in orders]}}, {"_id": 0}).to_list(200) if orders else []
+    by_order = {row["order_id"]: row for row in rows}
+    for order in orders:
+        order["return_request"] = by_order.get(order["id"])
+    return orders
+
+
+class ReturnRequestBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reason: str = Field(min_length=5, max_length=500)
+
+
+def _parse_order_time(value):
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+@router.post("/account/orders/{order_id}/returns")
+async def request_return(order_id: str, body: ReturnRequestBody, user: dict = Depends(get_current_user)):
+    order = await db.orders.find_one({"id": order_id, "customer_id": user["id"]}, {"_id": 0})
+    if not order:
+        raise HTTPException(404, "Order not found")
+    if order.get("status") != "delivered":
+        raise HTTPException(409, "A return can be requested after delivery")
+    delivered_at = _parse_order_time(order.get("delivered_at") or order.get("updated_at"))
+    if not delivered_at or datetime.now(timezone.utc) - delivered_at > timedelta(days=7):
+        raise HTTPException(409, "The 7-day return request window has closed")
+    existing = await db.return_requests.find_one({"order_id": order_id}, {"_id": 0})
+    if existing:
+        return existing
+    created_at = now_iso()
+    request = {
+        "id": new_id("ret_"), "order_id": order_id, "customer_id": user["id"],
+        "seller_id": order["seller_id"], "shop_id": order["shop_id"],
+        "reason": body.reason.strip(), "status": "requested", "refund_status": "not_started",
+        "refund_amount_paisa": int(order.get("total_paisa") or round(float(order.get("total") or 0) * 100)),
+        "timeline": [{"status": "requested", "actor": "customer", "actor_id": user["id"], "at": created_at}],
+        "created_at": created_at, "updated_at": created_at,
+    }
+    await db.return_requests.insert_one(dict(request))
+    await db.orders.update_one({"id": order_id}, {"$set": {"return_status": "requested", "updated_at": created_at}})
+    return request
 
 
 # ---------- Customer shop follows / purchase history ----------

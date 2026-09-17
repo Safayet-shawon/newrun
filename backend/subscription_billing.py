@@ -1,12 +1,15 @@
 from datetime import datetime, timezone, timedelta
 from typing import Literal
+import hashlib
+import json
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+from pymongo.errors import DuplicateKeyError
 
 from db import db, client, new_id, now_iso
 from security import require_role
-from entitlements import PLANS
+from entitlements import PLANS, PLAN_ORDER
 from admin import get_platform_settings
 from wallet import ensure_wallet, debit_wallet, mode as wallet_mode
 
@@ -17,6 +20,12 @@ seller_dep = require_role("seller")
 class SubscriptionPaymentBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     plan: Literal["start", "grow", "pro"]
+    idempotency_key: str = Field(min_length=16, max_length=100)
+
+
+class ScheduledChangeBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    plan: Literal["free", "start", "grow", "pro"]
 
 
 def _parse_iso(value):
@@ -29,6 +38,18 @@ def _parse_iso(value):
         return parsed.astimezone(timezone.utc)
     except Exception:
         return None
+
+
+def subscription_period(current: dict | None, target_plan: str, now: datetime) -> tuple[str, datetime, datetime]:
+    current = current or {}
+    existing_expiry = _parse_iso(current.get("expires_at"))
+    active = bool(current.get("status") in {"active", "active_dev"} and existing_expiry and existing_expiry > now)
+    if active and PLAN_ORDER.index(target_plan) < PLAN_ORDER.index(current.get("plan", "free")):
+        raise ValueError("Downgrades are not charged mid-cycle. Schedule the lower plan for period end.")
+    same_plan = bool(active and current.get("plan") == target_plan)
+    start = existing_expiry if same_plan else now
+    transition = "renewal" if same_plan else "upgrade" if active else "activation"
+    return transition, start, start + timedelta(days=30)
 
 
 async def _consume_pending_token(sub: dict, seller_id: str, shop_id: str | None, session):
@@ -84,7 +105,42 @@ async def billing_status(user=Depends(seller_dep)):
         "wallet_balance_paisa": int((wallet or {}).get("balance_paisa", 0) or 0),
         "wallet_mode": wallet_mode(),
         "plans": plans,
+        "policy": {
+            "period_days": 30,
+            "renewal": "Same-plan payments extend the current expiry by 30 days.",
+            "upgrade": "Upgrades start immediately for a new 30-day period; unused time is not prorated.",
+            "downgrade": "Downgrades are scheduled for the current period end and are never charged automatically.",
+        },
     }
+
+
+@router.put("/seller/subscription/scheduled-change")
+async def schedule_change(body: ScheduledChangeBody, user=Depends(seller_dep)):
+    current = await db.subscriptions.find_one({"seller_id": user["id"]}, {"_id": 0})
+    now = datetime.now(timezone.utc)
+    expiry = _parse_iso((current or {}).get("expires_at"))
+    if not current or current.get("status") not in {"active", "active_dev"} or not expiry or expiry <= now:
+        if body.plan == "free":
+            await db.subscriptions.update_one(
+                {"seller_id": user["id"]},
+                {"$set": {"plan": "free", "status": "active", "updated_at": now_iso()}, "$setOnInsert": {"id": new_id("sub_"), "created_at": now_iso(), "started_at": now_iso()}},
+                upsert=True,
+            )
+            return {"ok": True, "status": "active", "plan": "free"}
+        raise HTTPException(409, "Choose and pay for this plan to activate it")
+    if PLAN_ORDER.index(body.plan) >= PLAN_ORDER.index(current.get("plan", "free")):
+        raise HTTPException(409, "Only a lower plan can be scheduled; upgrades are activated by wallet payment")
+    await db.subscriptions.update_one(
+        {"id": current["id"]},
+        {"$set": {"scheduled_plan": body.plan, "scheduled_for": expiry.isoformat(), "auto_renew": False, "updated_at": now_iso()}},
+    )
+    return {"ok": True, "status": "scheduled", "plan": body.plan, "effective_at": expiry.isoformat()}
+
+
+@router.delete("/seller/subscription/scheduled-change")
+async def cancel_scheduled_change(user=Depends(seller_dep)):
+    await db.subscriptions.update_one({"seller_id": user["id"]}, {"$unset": {"scheduled_plan": "", "scheduled_for": ""}, "$set": {"updated_at": now_iso()}})
+    return {"ok": True}
 
 
 @router.post("/seller/subscription/pay-wallet")
@@ -98,19 +154,33 @@ async def pay_subscription(body: SubscriptionPaymentBody, user=Depends(seller_de
     if not shop:
         raise HTTPException(400, "Complete seller onboarding before subscribing")
 
+    request_digest = hashlib.sha256(json.dumps({"plan": body.plan}, sort_keys=True).encode()).hexdigest()
+    payment_identity = {"seller_id": user["id"], "idempotency_key": body.idempotency_key}
+    previous = await db.subscription_payments.find_one(payment_identity, {"_id": 0})
+    if previous:
+        if previous.get("digest") != request_digest:
+            raise HTTPException(409, "This payment key was already used for another plan")
+        if previous.get("status") == "completed":
+            return {**previous["response"], "replayed": True}
+        raise HTTPException(409, "This subscription payment is already being processed")
+
     async def commit(session):
         current = await db.subscriptions.find_one({"seller_id": user["id"]}, {"_id": 0}, session=session)
+        payment_id = new_id("subpay_")
+        await db.subscription_payments.insert_one({
+            **payment_identity, "id": payment_id, "digest": request_digest, "plan": body.plan,
+            "status": "processing", "created_at": now_iso(),
+        }, session=session)
+        pending = (current or {}).get("pending_purchase") or current or {}
         pending_discount = bool(
-            current
-            and current.get("plan") == body.plan
-            and current.get("status") == "pending_payment"
-            and current.get("pending_token_id")
+            pending.get("plan") == body.plan
+            and pending.get("pending_token_id")
         )
-        payable_bdt = float(current.get("payable_bdt", regular_price) if pending_discount else regular_price)
+        payable_bdt = float(pending.get("payable_bdt", regular_price) if pending_discount else regular_price)
         if payable_bdt < 0:
             raise HTTPException(409, "Invalid subscription amount")
         payable_paisa = int(round(payable_bdt * 100))
-        reference = new_id("subpay_")
+        reference = payment_id
         if payable_paisa:
             await debit_wallet(user["id"], payable_paisa, reference, session)
             await db.wallet_ledger.update_one(
@@ -119,13 +189,13 @@ async def pay_subscription(body: SubscriptionPaymentBody, user=Depends(seller_de
                 session=session,
             )
         if pending_discount:
-            await _consume_pending_token(current, user["id"], shop.get("id"), session)
+            await _consume_pending_token({**pending, "seller_id": user["id"]}, user["id"], shop.get("id"), session)
 
         now = datetime.now(timezone.utc)
-        existing_expiry = _parse_iso((current or {}).get("expires_at"))
-        same_active_plan = bool(current and current.get("plan") == body.plan and current.get("status") in {"active", "active_dev"} and existing_expiry and existing_expiry > now)
-        period_start = existing_expiry if same_active_plan else now
-        expiry = period_start + timedelta(days=30)
+        try:
+            transition, period_start, expiry = subscription_period(current, body.plan, now)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
         sub_id = (current or {}).get("id") or new_id("sub_")
         update = {
             "id": sub_id,
@@ -134,8 +204,8 @@ async def pay_subscription(body: SubscriptionPaymentBody, user=Depends(seller_de
             "status": "active",
             "current_period_started_at": period_start.isoformat(),
             "expires_at": expiry.isoformat(),
-            "original_price_bdt": float(current.get("original_price_bdt", regular_price) if pending_discount else regular_price),
-            "discount_bdt": float(current.get("discount_bdt", 0) if pending_discount else 0),
+            "original_price_bdt": float(pending.get("original_price_bdt", regular_price) if pending_discount else regular_price),
+            "discount_bdt": float(pending.get("discount_bdt", 0) if pending_discount else 0),
             "payable_bdt": payable_bdt,
             "amount_paid": payable_bdt,
             "payment_method": "nexora_wallet",
@@ -149,7 +219,7 @@ async def pay_subscription(body: SubscriptionPaymentBody, user=Depends(seller_de
             {
                 "$set": update,
                 "$setOnInsert": {"created_at": now_iso(), "started_at": now.isoformat()},
-                "$unset": {"pending_token_id": "", "pending_token_code": ""},
+                "$unset": {"pending_token_id": "", "pending_token_code": "", "pending_purchase": "", "scheduled_plan": "", "scheduled_for": ""},
             },
             upsert=True,
             session=session,
@@ -162,7 +232,15 @@ async def pay_subscription(body: SubscriptionPaymentBody, user=Depends(seller_de
             "changes": {"plan": body.plan, "amount_bdt": payable_bdt, "method": "nexora_wallet"},
             "created_at": now_iso(),
         }, session=session)
-        return {"ok": True, "status": "active", "plan": body.plan, "amount_paid_bdt": payable_bdt, "expires_at": expiry.isoformat()}
+        response = {"ok": True, "status": "active", "plan": body.plan, "amount_paid_bdt": payable_bdt, "expires_at": expiry.isoformat(), "transition": transition, "replayed": False}
+        await db.subscription_payments.update_one(payment_identity, {"$set": {"status": "completed", "response": response, "completed_at": now_iso()}}, session=session)
+        return response
 
-    async with await client.start_session() as session:
-        return await session.with_transaction(commit)
+    try:
+        async with await client.start_session() as session:
+            return await session.with_transaction(commit)
+    except DuplicateKeyError:
+        previous = await db.subscription_payments.find_one(payment_identity, {"_id": 0})
+        if previous and previous.get("digest") == request_digest and previous.get("status") == "completed":
+            return {**previous["response"], "replayed": True}
+        raise HTTPException(409, "This subscription payment is already being processed")

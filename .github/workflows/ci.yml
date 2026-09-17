@@ -9,9 +9,6 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -20,15 +17,16 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
       - name: Install backend dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r backend/requirements.txt
       - name: Compile backend
-        run: python -m compileall -q .
-      - name: Run global commerce unit tests
+        run: python -m compileall -q backend
+      - name: Run backend regression tests
         env:
           MONGO_URL: mongodb://127.0.0.1:27017
           DB_NAME: nexora_ci
           JWT_SECRET: ci-only-secret-that-is-longer-than-thirty-two-characters
-        run: pytest -q tests/test_global_core.py
+          PYTHONPATH: backend
+        run: python -m pytest -q backend/tests/test_global_core.py backend/tests/test_hardening.py
 
   frontend:
     runs-on: ubuntu-latest

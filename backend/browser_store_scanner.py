@@ -15,12 +15,13 @@ import ipaddress
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse, urlunparse
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from db import db, new_id, now_iso
 from security import require_role
 import store_importer
+from rate_limit import check_rate_limit
 import universal_store_scanner as universal
 
 router = APIRouter()
@@ -514,7 +515,7 @@ class ScanBody(BaseModel):
     confirm_rights: bool = False
 
 
-@router.post("/seller/import-store/scan")
+@router.post("/seller/import-store/scan/browser-legacy", include_in_schema=False)
 async def enhanced_scan(body: ScanBody, user: dict = Depends(seller_dep)):
     await store_importer._require_import(user)
     if not body.confirm_rights:
@@ -668,8 +669,9 @@ class ManualStartBody(BaseModel):
     confirm_rights: bool = False
 
 
-@router.post("/seller/import-store/manual/start")
-async def start_manual_browser(body: ManualStartBody, user: dict = Depends(seller_dep)):
+@router.post("/seller/import-store/browser/manual/start", include_in_schema=False)
+async def start_manual_browser(body: ManualStartBody, request: Request, user: dict = Depends(seller_dep)):
+    await check_rate_limit(request, action="assisted-import-start", limit=6, window_seconds=3600, identity=user["id"])
     await store_importer._require_import(user)
     if not body.confirm_rights:
         raise HTTPException(422, "Confirm ownership/permission before browser-assisted import")
@@ -742,7 +744,8 @@ async def start_manual_browser(body: ManualStartBody, user: dict = Depends(selle
 
 
 @router.post("/seller/import-store/manual/{session_id}/continue")
-async def continue_manual_browser(session_id: str, user: dict = Depends(seller_dep)):
+async def continue_manual_browser(session_id: str, request: Request, user: dict = Depends(seller_dep)):
+    await check_rate_limit(request, action="assisted-import-continue", limit=30, window_seconds=3600, identity=user["id"])
     await store_importer._require_import(user)
     await _cleanup_sessions()
     session = _manual_sessions.get(session_id)

@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from db import db, new_id, now_iso
 from entitlements import PLAN_FEATURES, PLANS, PLAN_ORDER
 from security import require_role
+from order_workflows import COURIER_TRANSITIONS, require_transition
 
 router = APIRouter()
 admin_dep = require_role("admin")
@@ -42,6 +43,11 @@ class DashboardThemeUpdate(BaseModel):
     border_radius:int=Field(ge=0,le=24,strict=True); font_family:Literal["sans","modern","serif"]
 
 class StatusUpdate(BaseModel): status:str
+class ShipmentStatusUpdate(BaseModel):
+    model_config=ConfigDict(extra="forbid")
+    status:Literal["pickup_requested","picked_up","in_transit","delivered","failed","returned","cancelled"]
+    tracking_code:Optional[str]=Field(default=None,max_length=120)
+    note:str=Field(default="",max_length=500)
 class PlanSetting(BaseModel):
     name:str=Field(min_length=2,max_length=30); price_bdt:int=Field(ge=0,le=1_000_000); billing_enabled:bool=False
 class DeliverySetting(BaseModel):
@@ -69,9 +75,29 @@ async def admin_order(order_id:str,user=Depends(admin_dep)):
 @router.patch("/admin/orders/{order_id}/status")
 async def update_order_status(order_id:str,body:StatusUpdate,user=Depends(admin_dep)):
     if body.status not in {"pending","confirmed","processing","shipped","delivered","cancelled"}: raise HTTPException(422,"Unsupported order status")
-    result=await db.orders.update_one({"id":order_id},{"$set":{"status":body.status,"updated_at":now_iso()}})
+    updates={"status":body.status,"updated_at":now_iso()}
+    if body.status=="delivered": updates["delivered_at"]=now_iso()
+    result=await db.orders.update_one({"id":order_id},{"$set":updates})
     if not result.matched_count: raise HTTPException(404,"Order not found")
     await audit(user,"admin.order.status_updated",order_id,{"status":body.status}); return await admin_order(order_id,user)
+
+@router.patch("/admin/shipments/{shipment_id}/status")
+async def update_shipment_status(shipment_id:str,body:ShipmentStatusUpdate,user=Depends(admin_dep)):
+    shipment=await db.shipments.find_one({"id":shipment_id},{"_id":0})
+    if not shipment: raise HTTPException(404,"Shipment not found")
+    try: require_transition(shipment.get("status","awaiting_courier_connection"),body.status,COURIER_TRANSITIONS,"Shipment")
+    except ValueError as exc: raise HTTPException(409,str(exc)) from exc
+    event={"status":body.status,"label":body.note.strip() or body.status.replace("_"," ").title(),"actor":"admin","actor_id":user["id"],"at":now_iso()}
+    updates={"status":body.status,"updated_at":now_iso()}
+    if body.tracking_code is not None: updates["tracking_code"]=body.tracking_code.strip() or None
+    await db.shipments.update_one({"id":shipment_id},{"$set":updates,"$push":{"timeline":event}})
+    order_updates={"courier_status":body.status,"updated_at":now_iso()}
+    if body.status in {"picked_up","in_transit"}: order_updates["status"]="shipped"
+    elif body.status=="delivered": order_updates.update({"status":"delivered","delivered_at":now_iso()})
+    elif body.status=="returned": order_updates["status"]="returned"
+    await db.orders.update_one({"id":shipment["order_id"]},{"$set":order_updates})
+    await audit(user,"admin.shipment.status_updated",shipment_id,{"status":body.status,"tracking_code":bool(body.tracking_code)})
+    return await db.shipments.find_one({"id":shipment_id},{"_id":0})
 
 @router.get("/admin/customers")
 async def customers(user=Depends(admin_dep)):
@@ -122,7 +148,11 @@ async def categories(user=Depends(admin_dep)):
 async def finance(user=Depends(admin_dep)):
     settings=await get_platform_settings(); orders=await db.orders.find({}, {"_id":0,"total":1,"total_paisa":1,"payment_status":1}).to_list(10000)
     gross=sum(float(o.get("total",o.get("total_paisa",0)/100)) for o in orders); paid=sum(float(o.get("total",o.get("total_paisa",0)/100)) for o in orders if o.get("payment_status")=="paid"); rate=settings["commission_percent"]
-    return {"gross_bdt":round(gross,2),"paid_bdt":round(paid,2),"unpaid_bdt":round(gross-paid,2),"commission_percent":rate,"estimated_commission_bdt":round(paid*rate/100,2),"payouts":await db.payouts.find({}, {"_id":0}).sort([("created_at",-1)]).limit(200).to_list(200)}
+    snapshots=await db.order_accounting.find({}, {"_id":0,"platform_commission_paisa":1,"platform_order_fee_paisa":1,"seller_net_paisa":1,"settlement_status":1}).to_list(10000)
+    snapshot_commission=sum(int(row.get("platform_commission_paisa") or 0) for row in snapshots)/100
+    snapshot_fees=sum(int(row.get("platform_order_fee_paisa") or 0) for row in snapshots)/100
+    seller_net=sum(int(row.get("seller_net_paisa") or 0) for row in snapshots)/100
+    return {"gross_bdt":round(gross,2),"paid_bdt":round(paid,2),"unpaid_bdt":round(gross-paid,2),"commission_percent":rate,"estimated_commission_bdt":round(snapshot_commission if snapshots else paid*rate/100,2),"platform_order_fees_bdt":round(snapshot_fees,2),"snapshot_seller_net_bdt":round(seller_net,2),"accounting_snapshot_orders":len(snapshots),"settlement_enabled":False,"payouts":await db.payouts.find({}, {"_id":0}).sort([("created_at",-1)]).limit(200).to_list(200)}
 
 @router.get("/admin/platform-settings")
 async def platform_settings(user=Depends(admin_dep)):

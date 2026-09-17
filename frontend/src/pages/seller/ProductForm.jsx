@@ -28,7 +28,7 @@ export default function ProductForm() {
         setLoading(false);
       });
     }
-  }, [id]);
+  }, [editing, id]);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 

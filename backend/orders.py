@@ -11,6 +11,8 @@ from order_models import CheckoutBody
 from product_rules import resolve_selection
 from wallet import debit_wallet, mode as wallet_mode
 from global_core import shipping_for_shop, normalize_country
+from admin import get_platform_settings
+from accounting import order_accounting_snapshot
 
 router = APIRouter()
 
@@ -135,6 +137,7 @@ async def checkout(body: CheckoutBody, user: dict = Depends(get_current_user)):
             raise HTTPException(409, "Prices or delivery charges changed. Refresh the order quote.")
         created = []
         checkout_id = new_id("checkout_")
+        platform_settings = await get_platform_settings()
         if body.payment_method == "nexora_wallet":
             await debit_wallet(user["id"], quote["total_paisa"], checkout_id, session)
 
@@ -157,6 +160,9 @@ async def checkout(body: CheckoutBody, user: dict = Depends(get_current_user)):
                 raise HTTPException(409, "Stock or options changed. Review your cart and try again.")
 
         for group in quote["groups"]:
+            subscription = await db.subscriptions.find_one({"seller_id": group["seller_id"], "status": {"$in": ["active", "active_dev"]}}, {"_id": 0, "plan": 1}, session=session)
+            seller_plan = (subscription or {}).get("plan", "free")
+            accounting = order_accounting_snapshot(group, seller_plan, platform_settings)
             order = {
                 **group,
                 "id": new_id("ord_"),
@@ -169,14 +175,19 @@ async def checkout(body: CheckoutBody, user: dict = Depends(get_current_user)):
                 "payment_status": "unpaid",
                 "payment_method": body.payment_method,
                 "currency": "BDT",
-                "commission_status": "policy_pending",
-                "commission_rate": None,
+                "commission_status": "accrued" if body.payment_method == "nexora_wallet" else "pending_payment",
+                "commission_rate": accounting["commission_rate_percent"],
+                "accounting": accounting,
                 "created_at": now_iso(),
             }
             if body.payment_method == "nexora_wallet":
                 order["payment_status"] = "paid"
                 order["payment_mode"] = wallet_mode()
             await db.orders.insert_one(dict(order), session=session)
+            await db.order_accounting.insert_one({
+                "id": new_id("acct_"), "order_id": order["id"], "checkout_id": checkout_id,
+                "seller_id": group["seller_id"], **accounting, "created_at": now_iso(),
+            }, session=session)
             created.append(order)
 
         await db.checkouts.insert_one({**identity, "digest": digest, "orders": created, "currency": "BDT", "created_at": now_iso()}, session=session)

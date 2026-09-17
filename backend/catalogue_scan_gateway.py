@@ -5,13 +5,14 @@ fetched as ordinary public websites. Other websites use the deep multi-page scan
 """
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from security import require_role
 import store_importer
 import browser_store_scanner
 import deep_catalog_scanner
+from rate_limit import check_rate_limit
 
 router = APIRouter()
 seller_dep = require_role("seller")
@@ -38,7 +39,8 @@ def _is_facebook(url):
 
 
 @router.post('/seller/import-store/scan')
-async def scan_catalogue(body: ScanBody, user: dict = Depends(seller_dep)):
+async def scan_catalogue(body: ScanBody, request: Request, user: dict = Depends(seller_dep)):
+    await check_rate_limit(request, action="catalogue-scan", limit=12, window_seconds=3600, identity=user["id"])
     await store_importer._require_import(user)
     if not body.confirm_rights:
         raise HTTPException(422, 'Confirm that you own this website/page or have permission to import its catalogue')

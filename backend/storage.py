@@ -1,9 +1,11 @@
 import os
+from io import BytesIO
 from pathlib import Path
 
 import boto3
 import requests
 from botocore.config import Config
+from PIL import Image, UnidentifiedImageError
 
 LOCAL_ROOT = Path(__file__).resolve().parent.parent / ".local" / "uploads"
 STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "local").strip().lower()
@@ -132,3 +134,34 @@ MIME_TYPES = {
     "gif": "image/gif",
     "webp": "image/webp",
 }
+
+MAX_IMAGE_PIXELS = 40_000_000
+PIL_FORMATS = {"JPEG": "jpg", "PNG": "png", "GIF": "gif", "WEBP": "webp"}
+
+
+def validate_image_bytes(data: bytes, filename: str = "", content_type: str = "") -> tuple[str, str]:
+    """Verify the decoded image, not just the user-controlled file extension."""
+    if not data:
+        raise ValueError("Image is empty")
+    Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
+    try:
+        with Image.open(BytesIO(data)) as image:
+            image_format = str(image.format or "").upper()
+            width, height = image.size
+            image.verify()
+    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as exc:
+        raise ValueError("File content is not a valid supported image") from exc
+    if image_format not in PIL_FORMATS:
+        raise ValueError("Only JPG, PNG, GIF and WEBP images are allowed")
+    if width < 1 or height < 1 or width * height > MAX_IMAGE_PIXELS:
+        raise ValueError("Image dimensions are too large")
+    canonical_ext = PIL_FORMATS[image_format]
+    supplied_ext = Path(filename or "").suffix.lower().lstrip(".")
+    if supplied_ext == "jpeg":
+        supplied_ext = "jpg"
+    if supplied_ext and supplied_ext != canonical_ext:
+        raise ValueError("Image extension does not match its content")
+    expected_type = MIME_TYPES[canonical_ext]
+    if content_type and content_type.lower() not in {expected_type, "image/jpg" if canonical_ext == "jpg" else expected_type}:
+        raise ValueError("Image content type does not match its content")
+    return canonical_ext, expected_type

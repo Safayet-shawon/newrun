@@ -9,13 +9,14 @@ import math
 import socket
 from urllib.parse import urljoin, urlparse
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
 import numpy as np
 import requests
 
 from db import db
 from search_engine import expand_query, normalize_text, smart_product_search, smart_shop_search
 from storage import get_object
+from rate_limit import check_rate_limit
 
 router = APIRouter()
 
@@ -217,7 +218,8 @@ async def _signature_for_product(product: dict, semaphore: asyncio.Semaphore):
 
 
 @router.post("/search/image")
-async def image_search(file: UploadFile = File(...), limit: int = Query(default=24, ge=1, le=40)):
+async def image_search(request: Request, file: UploadFile = File(...), limit: int = Query(default=24, ge=1, le=40)):
+    await check_rate_limit(request, action="visual-search", limit=10, window_seconds=3600)
     if not (file.content_type or "").lower().startswith("image/"):
         raise HTTPException(400, "Please upload an image file")
     raw = await file.read(MAX_IMAGE_BYTES + 1)

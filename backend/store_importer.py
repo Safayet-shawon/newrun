@@ -17,12 +17,13 @@ from urllib.parse import urljoin, urlparse, urlunparse
 from xml.etree import ElementTree
 
 import requests
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from db import db, new_id, now_iso
 from entitlements import get_entitlements
 from product_rules import validate_product
+from rate_limit import check_rate_limit
 from security import require_role
 import seller
 
@@ -359,7 +360,7 @@ class ScanBody(BaseModel):
     confirm_rights: bool = False
 
 
-@router.post("/seller/import-store/scan")
+@router.post("/seller/import-store/scan/legacy", include_in_schema=False)
 async def scan_store(body: ScanBody, user: dict = Depends(seller_dep)):
     await _require_import(user)
     if not body.confirm_rights:
@@ -404,7 +405,8 @@ def _document(item: dict, shop: dict, seller_id: str, publish=False):
 
 
 @router.post("/seller/import-store/import")
-async def import_products(body: ImportBody, user: dict = Depends(seller_dep)):
+async def import_products(body: ImportBody, request: Request, user: dict = Depends(seller_dep)):
+    await check_rate_limit(request, action="catalogue-import-write", limit=12, window_seconds=3600, identity=user["id"])
     _, shop, _, plan_id = await _require_import(user)
     scan = await db.store_import_scans.find_one({"id": body.scan_id, "seller_id": user["id"]}, {"_id": 0})
     if not scan:
@@ -528,7 +530,8 @@ async def _sync_profile(profile: dict):
 
 
 @router.post("/seller/import-store/sync-now")
-async def sync_now(user: dict = Depends(seller_dep)):
+async def sync_now(request: Request, user: dict = Depends(seller_dep)):
+    await check_rate_limit(request, action="catalogue-sync", limit=6, window_seconds=3600, identity=user["id"])
     await _require_import(user)
     profile = await db.store_import_profiles.find_one({"seller_id": user["id"]}, {"_id": 0})
     if not profile or not profile.get("website_url"):

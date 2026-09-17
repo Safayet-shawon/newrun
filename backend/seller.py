@@ -10,12 +10,28 @@ from product_rules import validate_product
 from db import db, NO_ID, new_id, now_iso
 from security import get_current_user, require_role
 from entitlements import get_plan, get_entitlements, PLANS, PLAN_ORDER, PLAN_FEATURES
-from storage import put_object, get_object, APP_NAME, MIME_TYPES
+from storage import put_object, get_object, APP_NAME, validate_image_bytes
 from admin import get_dashboard_theme
+from order_workflows import RETURN_TRANSITIONS, require_transition
 
 router = APIRouter()
 
 seller_dep = require_role("seller")
+
+RESERVED_SHOP_SLUGS = {
+    "admin", "api", "account", "auth", "cart", "checkout", "login", "logout",
+    "products", "search", "seller", "shops", "signup", "static", "support",
+}
+
+
+def normalize_shop_slug(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9-]+", "-", str(value or "").strip().lower())
+    slug = re.sub(r"-+", "-", slug).strip("-")
+    if not 3 <= len(slug) <= 63:
+        raise ValueError("Shop URL must be 3-63 letters, numbers or hyphens")
+    if slug in RESERVED_SHOP_SLUGS or slug.startswith(("api-", "admin-")):
+        raise ValueError("Choose a different shop URL")
+    return slug
 
 
 def _order_total_bdt(order):
@@ -88,8 +104,11 @@ class OnboardingBody(BaseModel):
 @router.post("/seller/onboarding")
 async def seller_onboarding(body: OnboardingBody, user: dict = Depends(seller_dep)):
     plan_id = body.plan if body.plan in PLANS else "free"
-    slug = body.shop_slug.lower().strip().replace(" ", "-")
-    existing = await db.shops.find_one({"slug": slug})
+    try:
+        slug = normalize_shop_slug(body.shop_slug)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    existing = await db.shops.find_one({"slug": {"$regex": f"^{re.escape(slug)}$", "$options": "i"}})
     if existing and existing.get("seller_id") != user["id"]:
         raise HTTPException(status_code=400, detail="This shop URL is already taken")
 
@@ -407,6 +426,33 @@ async def seller_order_action(order_id: str, body: SellerOrderAction, user: dict
     return await db.orders.find_one({"id": order_id}, {"_id": 0})
 
 
+class ReturnAction(BaseModel):
+    action: Literal["approve", "reject", "item_received", "refund_pending", "resolved"]
+    note: str = Field(default="", max_length=500)
+
+
+@router.post("/seller/orders/{order_id}/return-action")
+async def seller_return_action(order_id: str, body: ReturnAction, user: dict = Depends(seller_dep)):
+    order = await db.orders.find_one({"id": order_id, "seller_id": user["id"]}, {"_id": 0})
+    if not order:
+        raise HTTPException(404, "Order not found")
+    request = await db.return_requests.find_one({"order_id": order_id}, {"_id": 0})
+    if not request:
+        raise HTTPException(404, "Return request not found")
+    target = {"approve": "approved", "reject": "rejected"}.get(body.action, body.action)
+    try:
+        require_transition(request["status"], target, RETURN_TRANSITIONS, "Return")
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    timeline = {"status": target, "actor": "seller", "actor_id": user["id"], "note": body.note.strip(), "at": now_iso()}
+    updates = {"status": target, "updated_at": now_iso()}
+    if target == "refund_pending":
+        updates["refund_status"] = "manual_review_required"
+    await db.return_requests.update_one({"id": request["id"]}, {"$set": updates, "$push": {"timeline": timeline}})
+    await db.orders.update_one({"id": order_id}, {"$set": {"return_status": target, "updated_at": now_iso()}})
+    return await db.return_requests.find_one({"id": request["id"]}, {"_id": 0})
+
+
 @router.post("/seller/products/bulk")
 async def bulk_action(body: BulkBody, user: dict = Depends(seller_dep)):
     _, shop, _, plan_id = await _seller_context(user)
@@ -535,8 +581,11 @@ async def seller_orders(user: dict = Depends(seller_dep)):
     shipment_ids = [order.get("shipment_id") for order in orders if order.get("shipment_id")]
     shipments = await db.shipments.find({"id": {"$in": shipment_ids}}, {"_id": 0}).to_list(200) if shipment_ids else []
     by_id = {shipment["id"]: shipment for shipment in shipments}
+    return_rows = await db.return_requests.find({"order_id": {"$in": [order["id"] for order in orders]}}, {"_id": 0}).to_list(200) if orders else []
+    returns_by_order = {row["order_id"]: row for row in return_rows}
     for order in orders:
         order["shipment"] = by_id.get(order.get("shipment_id"))
+        order["return_request"] = returns_by_order.get(order["id"])
     return orders
 
 
@@ -577,7 +626,17 @@ class PlanChange(BaseModel):
 async def change_subscription(body: PlanChange, user: dict = Depends(seller_dep)):
     if body.plan not in PLANS:
         raise HTTPException(status_code=400, detail="Invalid plan")
-    subscription_status = "active" if body.plan == "free" else ("active_dev" if os.getenv("ALLOW_DEV_SUBSCRIPTIONS", "false").lower() == "true" else "pending")
+    current = await db.subscriptions.find_one({"seller_id": user["id"]}, {"_id": 0})
+    expiry = _order_datetime((current or {}).get("expires_at"))
+    active_paid = bool(current and current.get("plan") != "free" and current.get("status") in {"active", "active_dev"} and (not expiry or expiry > datetime.now(timezone.utc)))
+    if body.plan == "free" and active_paid:
+        if not expiry:
+            raise HTTPException(409, "This legacy subscription has no period end. Contact support before changing it.")
+        await db.subscriptions.update_one({"id": current["id"]}, {"$set": {"scheduled_plan": "free", "scheduled_for": current["expires_at"], "auto_renew": False, "updated_at": now_iso()}})
+        return {"status": "scheduled", "effective_at": current["expires_at"], "plan": get_plan("free"), "entitlements": get_entitlements(current["plan"])}
+    if body.plan != "free" and os.getenv("ALLOW_DEV_SUBSCRIPTIONS", "false").lower() != "true":
+        raise HTTPException(409, "Paid plans must be activated through /seller/subscription/pay-wallet")
+    subscription_status = "active" if body.plan == "free" else "active_dev"
     await db.subscriptions.update_one(
         {"seller_id": user["id"]},
         {"$set": {"plan": body.plan, "status": subscription_status, "updated_at": now_iso()},
@@ -590,19 +649,20 @@ async def change_subscription(body: PlanChange, user: dict = Depends(seller_dep)
 # ---------- Upload ----------
 @router.post("/upload")
 async def upload_file(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
-    ext = (file.filename or "file.bin").split(".")[-1].lower()
-    if ext not in MIME_TYPES:
-        raise HTTPException(status_code=400, detail="Only image files are allowed")
-    path = f"{APP_NAME}/uploads/{user['id']}/{uuid.uuid4().hex}.{ext}"
     data = await file.read(8 * 1024 * 1024 + 1)
     if len(data) > 8 * 1024 * 1024:
         raise HTTPException(413, "Images must be at most 8 MB")
-    result = put_object(path, data, MIME_TYPES.get(ext, "application/octet-stream"))
+    try:
+        ext, content_type = validate_image_bytes(data, file.filename or "", file.content_type or "")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    path = f"{APP_NAME}/uploads/{user['id']}/{uuid.uuid4().hex}.{ext}"
+    result = put_object(path, data, content_type)
     await db.files.insert_one({
         "id": new_id("file_"),
         "storage_path": result["path"],
         "original_filename": file.filename,
-        "content_type": MIME_TYPES.get(ext),
+        "content_type": content_type,
         "owner": user["id"],
         "is_deleted": False,
         "created_at": now_iso(),

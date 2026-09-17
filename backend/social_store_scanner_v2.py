@@ -8,7 +8,7 @@ catalogue review. No login/CAPTCHA bypass is attempted.
 import re
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from security import require_role
@@ -16,6 +16,7 @@ import browser_store_scanner as browser
 import social_store_scanner as legacy
 import store_importer
 import universal_store_scanner as universal
+from rate_limit import check_rate_limit
 
 router = APIRouter()
 seller_dep = require_role("seller")
@@ -53,7 +54,8 @@ class SocialStartBody(BaseModel):
 
 @router.post("/seller/import-store/manual/start")
 @router.post("/seller/import-store/social/manual/start")
-async def start_assisted(body: SocialStartBody, user: dict = Depends(seller_dep)):
+async def start_assisted(body: SocialStartBody, request: Request, user: dict = Depends(seller_dep)):
+    await check_rate_limit(request, action="assisted-import-start", limit=6, window_seconds=3600, identity=user["id"])
     legacy_body = legacy.SocialStartBody(url=body.url, confirm_rights=body.confirm_rights)
     return await legacy.start_assisted(legacy_body, user)
 
@@ -158,7 +160,8 @@ async def _facebook_posts_deep(page):
 
 
 @router.post("/seller/import-store/social/manual/{session_id}/continue")
-async def continue_social(session_id: str, user: dict = Depends(seller_dep)):
+async def continue_social(session_id: str, request: Request, user: dict = Depends(seller_dep)):
+    await check_rate_limit(request, action="assisted-import-continue", limit=30, window_seconds=3600, identity=user["id"])
     await store_importer._require_import(user)
     await browser._cleanup_sessions()
     session = browser._manual_sessions.get(session_id)

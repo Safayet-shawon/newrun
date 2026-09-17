@@ -38,7 +38,14 @@ async def seller_context_with_expiry(user: dict):
     if sub and sub.get("status") in ("active", "active_dev"):
         expiry = parse_iso(sub.get("expires_at"))
         if expiry and expiry <= utcnow():
-            await db.subscriptions.update_one({"id": sub["id"]}, {"$set": {"status": "expired", "updated_at": now_iso()}}); sub["status"] = "expired"
+            scheduled = sub.get("scheduled_plan")
+            if scheduled == "free":
+                await db.subscriptions.update_one({"id": sub["id"]}, {"$set": {"plan": "free", "status": "active", "updated_at": now_iso()}, "$unset": {"scheduled_plan": "", "scheduled_for": ""}})
+                sub.update({"plan": "free", "status": "active"}); plan_id = "free"
+            else:
+                updates = {"status": "expired", "updated_at": now_iso()}
+                if scheduled: updates.update({"plan": scheduled, "status": "pending_payment"})
+                await db.subscriptions.update_one({"id": sub["id"]}, {"$set": updates, "$unset": {"scheduled_plan": "", "scheduled_for": ""}}); sub.update(updates)
         else: plan_id = sub.get("plan", "free")
     return profile, shop, sub, plan_id
 
@@ -165,10 +172,17 @@ async def preview(body: TokenPreviewBody, user=Depends(seller_dep)):
 @router.post("/seller/subscription-token/redeem")
 async def redeem(body: TokenPreviewBody, user=Depends(seller_dep)):
     q = await token_quote(body.code, body.plan, user["id"]); token = q["token"]; shop = await db.shops.find_one({"seller_id": user["id"]}, {"_id": 0}); dev = os.getenv("ALLOW_DEV_SUBSCRIPTIONS", "false").lower() == "true"
+    current = await db.subscriptions.find_one({"seller_id": user["id"]}, {"_id": 0})
+    current_expiry = parse_iso((current or {}).get("expires_at"))
+    active = bool(current and current.get("status") in {"active", "active_dev"} and (not current_expiry or current_expiry > utcnow()))
+    if active and PLAN_ORDER.index(body.plan) < PLAN_ORDER.index(current.get("plan", "free")):
+        raise HTTPException(409, "Downgrades must be scheduled for period end; a token cannot shorten an active plan")
     if token["token_type"] == "discount" and not dev:
-        await db.subscriptions.update_one({"seller_id": user["id"]}, {"$set": {"plan": body.plan, "status": "pending_payment", "pending_token_id": token["id"], "pending_token_code": token["code"], "original_price_bdt": q["original_price_bdt"], "discount_bdt": q["discount_bdt"], "payable_bdt": q["payable_bdt"], "subscription_source": "discount_token", "updated_at": now_iso()}, "$setOnInsert": {"id": new_id("sub_"), "seller_id": user["id"], "started_at": now_iso(), "created_at": now_iso()}}, upsert=True)
+        pending = {"plan": body.plan, "pending_token_id": token["id"], "pending_token_code": token["code"], "original_price_bdt": q["original_price_bdt"], "discount_bdt": q["discount_bdt"], "payable_bdt": q["payable_bdt"], "subscription_source": "discount_token"}
+        updates = {"pending_purchase": pending, "updated_at": now_iso()} if active else {**pending, "plan": body.plan, "status": "pending_payment", "updated_at": now_iso()}
+        await db.subscriptions.update_one({"seller_id": user["id"]}, {"$set": updates, "$setOnInsert": {"id": new_id("sub_"), "seller_id": user["id"], "started_at": now_iso(), "created_at": now_iso()}}, upsert=True)
         return {"ok": True, "status": "pending_payment", "requires_payment": True, "plan": get_plan(body.plan), **{k: q[k] for k in ("original_price_bdt", "discount_bdt", "payable_bdt")}, "token": {"code": token["code"], "token_type": token["token_type"]}}
-    red = await consume_token(q, user["id"], (shop or {}).get("id")); start = utcnow(); expiry = start + timedelta(days=int(token["free_access_days"])) if token["token_type"] == "free_access" else start + timedelta(days=30); status = "active" if token["token_type"] == "free_access" else "active_dev"
+    red = await consume_token(q, user["id"], (shop or {}).get("id")); now = utcnow(); same_plan = bool(active and current.get("plan") == body.plan and current_expiry); start = current_expiry if same_plan else now; expiry = start + timedelta(days=int(token["free_access_days"])) if token["token_type"] == "free_access" else start + timedelta(days=30); status = "active" if token["token_type"] == "free_access" else "active_dev"
     try:
         old = await db.subscriptions.find_one({"seller_id": user["id"]}, {"_id": 0}); sub_id = (old or {}).get("id") or new_id("sub_")
         await db.subscriptions.update_one({"seller_id": user["id"]}, {"$set": {"id": sub_id, "plan": body.plan, "status": status, "started_at": (old or {}).get("started_at") or start.isoformat(), "current_period_started_at": start.isoformat(), "expires_at": expiry.isoformat(), "token_id": token["id"], "token_code": token["code"], "original_price_bdt": q["original_price_bdt"], "discount_bdt": q["discount_bdt"], "payable_bdt": q["payable_bdt"], "amount_paid": q["payable_bdt"], "subscription_source": "free_access_token" if token["token_type"] == "free_access" else "discount_token", "updated_at": now_iso()}, "$setOnInsert": {"created_at": now_iso()}}, upsert=True)

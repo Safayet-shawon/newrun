@@ -13,6 +13,7 @@ from wallet import debit_wallet, mode as wallet_mode
 from global_core import shipping_for_shop, normalize_country
 from admin import get_platform_settings
 from accounting import order_accounting_snapshot
+from entitlements import get_effective_plan_id
 
 router = APIRouter()
 
@@ -160,8 +161,12 @@ async def checkout(body: CheckoutBody, user: dict = Depends(get_current_user)):
                 raise HTTPException(409, "Stock or options changed. Review your cart and try again.")
 
         for group in quote["groups"]:
-            subscription = await db.subscriptions.find_one({"seller_id": group["seller_id"], "status": {"$in": ["active", "active_dev"]}}, {"_id": 0, "plan": 1}, session=session)
-            seller_plan = (subscription or {}).get("plan", "free")
+            subscription = await db.subscriptions.find_one(
+                {"seller_id": group["seller_id"]},
+                {"_id": 0, "plan": 1, "status": 1, "expires_at": 1},
+                session=session,
+            )
+            seller_plan = get_effective_plan_id(subscription)
             accounting = order_accounting_snapshot(group, seller_plan, platform_settings)
             order = {
                 **group,

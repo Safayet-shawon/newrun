@@ -5,28 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 import conversational_commerce
 import seller
-from db import db
+from db import db, new_id, now_iso
 from security import require_role
 
 router = APIRouter()
 seller_dep = require_role("seller")
-
-
-async def ensure_indexes():
-    """Keep provider message IDs unique without indexing null outbound IDs."""
-    info = await db.messages.index_information()
-    existing = info.get("external_message_id_1")
-    expected_partial = {"external_message_id": {"$type": "string"}}
-    if existing and existing.get("partialFilterExpression") != expected_partial:
-        await db.messages.drop_index("external_message_id_1")
-        existing = None
-    if not existing:
-        await db.messages.create_index(
-            "external_message_id",
-            name="external_message_id_1",
-            unique=True,
-            partialFilterExpression=expected_partial,
-        )
 
 
 def _require_meta_production_config():
@@ -54,6 +37,57 @@ async def guarded_meta_webhook_verify(request: Request):
 async def guarded_meta_webhook(request: Request):
     _require_meta_production_config()
     return await conversational_commerce.meta_webhook(request)
+
+
+@router.post("/seller/inbox/conversations/{conversation_id}/messages")
+async def guarded_send_message(
+    conversation_id: str,
+    body: conversational_commerce.SendMessageBody,
+    user: dict = Depends(seller_dep),
+):
+    conversation = await db.conversations.find_one(
+        {"id": conversation_id, "seller_id": user["id"]},
+        {"_id": 0},
+    )
+    if not conversation:
+        raise HTTPException(404, "Conversation not found")
+    connection = await db.channel_connections.find_one(
+        {
+            "seller_id": user["id"],
+            "provider": conversation["provider"],
+            "external_account_id": conversation["external_account_id"],
+            "status": "connected",
+        },
+        {"_id": 0},
+    )
+    if not connection:
+        raise HTTPException(409, "Reconnect this channel before sending messages")
+
+    text = body.text.strip()
+    external_id = await conversational_commerce._send_provider_message(
+        connection,
+        conversation["external_customer_id"],
+        text,
+    )
+    message = {
+        "id": new_id("msg_"),
+        "conversation_id": conversation_id,
+        "seller_id": user["id"],
+        "provider": conversation["provider"],
+        "direction": "outbound",
+        "message_type": "text",
+        "text": text,
+        "status": "sent",
+        "created_at": now_iso(),
+    }
+    if external_id:
+        message["external_message_id"] = external_id
+    await db.messages.insert_one(dict(message))
+    await db.conversations.update_one(
+        {"id": conversation_id},
+        {"$set": {"last_message": text, "last_message_at": message["created_at"], "updated_at": now_iso()}},
+    )
+    return message
 
 
 class GuardedSellerOrderAction(seller.SellerOrderAction):

@@ -56,6 +56,7 @@ import Intelligence from "@/pages/seller/IntelligenceV2";
 import StoreImport from "@/pages/seller/StoreImportV2";
 import UnifiedInbox from "@/pages/seller/UnifiedInbox";
 import RiskCenter from "@/pages/seller/RiskCenter";
+import SellerGrowthOS from "@/pages/seller/SellerGrowthOS";
 import Settings from "@/pages/seller/Settings";
 import Notifications from "@/pages/seller/Notifications";
 
@@ -138,6 +139,7 @@ function AppRoutes() {
         <Route path="orders" element={<Orders />} />
         <Route path="inbox" element={<UnifiedInbox />} />
         <Route path="risk-center" element={<RiskCenter />} />
+        <Route path="growth-os" element={<SellerGrowthOS />} />
         <Route path="products" element={<Products />} />
         <Route path="products/new" element={<ProductForm />} />
         <Route path="products/:id/edit" element={<ProductForm />} />

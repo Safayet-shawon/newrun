@@ -3,7 +3,7 @@ import { NavLink, Outlet, Link, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, ShoppingCart, Package, PlusCircle, Boxes, Store, Palette,
   CreditCard, Wallet, Users, Star, BarChart3, Settings, Bell, Menu, X, ExternalLink,
-  Eye, LogOut, ChevronDown, Sparkles, Globe2, Lock, MessagesSquare, ShieldAlert,
+  Eye, LogOut, ChevronDown, Sparkles, Globe2, Lock, MessagesSquare, ShieldAlert, BrainCircuit,
 } from "lucide-react";
 import { Logo, Loader } from "@/components/shared/Bits";
 import { SellerProvider, useSeller } from "@/context/SellerContext";
@@ -15,6 +15,7 @@ const NAV = [
   { to: "/seller/dashboard/orders", icon: ShoppingCart, label: "Orders" },
   { to: "/seller/dashboard/inbox", icon: MessagesSquare, label: "Commerce Inbox" },
   { to: "/seller/dashboard/risk-center", icon: ShieldAlert, label: "Fraud Shield" },
+  { to: "/seller/dashboard/growth-os", icon: BrainCircuit, label: "Growth OS" },
   { to: "/seller/dashboard/products", icon: Package, label: "Products" },
   { to: "/seller/dashboard/products/new", icon: PlusCircle, label: "Add Product" },
   { to: "/seller/dashboard/inventory", icon: Boxes, label: "Inventory" },

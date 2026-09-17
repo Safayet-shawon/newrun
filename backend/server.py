@@ -42,6 +42,8 @@ import storage
 import fraud_shield
 import conversational_commerce
 import commerce_hardening
+import production_ops
+import connector_execution
 import growth_os
 
 subscription_tokens.install_seller_expiry_guard(seller)
@@ -54,8 +56,10 @@ app = FastAPI(title="NEXORA API", version="1.0.0")
 app.include_router(auth.router, prefix="/api")
 app.include_router(catalog.router, prefix="/api")
 app.include_router(smart_search.router, prefix="/api")
-# Guarded routes must be registered before the original seller/Meta routes.
+# Guarded and executable routes are intentionally registered before foundation routes.
 app.include_router(commerce_hardening.router, prefix="/api")
+app.include_router(production_ops.router, prefix="/api")
+app.include_router(connector_execution.router, prefix="/api")
 app.include_router(growth_os.router, prefix="/api")
 app.include_router(seller.router, prefix="/api")
 app.include_router(seller_global.router, prefix="/api")
@@ -167,6 +171,7 @@ async def startup():
         await rate_limit.ensure_rate_limit_indexes()
         await conversational_commerce.ensure_indexes()
         await growth_os.ensure_indexes()
+        await production_ops.ensure_indexes()
     except Exception as e:
         logger.error(f"Index/category setup: {e}")
 

@@ -108,6 +108,13 @@ async def guarded_seller_order_action(
         )
         if not order:
             raise HTTPException(404, "Order not found")
+        # Secure-link confirmation is a valid customer verification method. Growth OS
+        # predates that method and recognizes its existing approval statuses, so map it
+        # in-memory without rewriting the audit record stored on the order.
+        verification = dict(order.get("fraud_verification") or {})
+        if verification.get("status") == "customer_confirmed":
+            verification["status"] = "approve"
+            order["fraud_verification"] = verification
         order = await growth_os.ensure_order_decision(order)
         if order.get("risk_hold"):
             raise HTTPException(

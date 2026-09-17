@@ -1,4 +1,6 @@
 import os
+from datetime import datetime, timezone
+
 """Central feature-entitlement configuration. Single source of truth for plan gating."""
 
 PLAN_ORDER = ["free", "start", "grow", "pro"]
@@ -79,7 +81,7 @@ PLANS = {
         "commission_percent": 5,
         "entitlements": {
             "max_products": 500,
-            "theme_switching": True,
+            "theme_switching": False,
             "theme_access": "all",
             "custom_accent_color": True,
             "custom_css": False,
@@ -138,9 +140,6 @@ PLANS = {
     },
 }
 
-# Keep the current project's existing behaviour.
-PLANS["grow"]["entitlements"]["theme_switching"] = False
-
 for plan_id, plan in PLANS.items():
     plan["price_bdt"] = int(os.getenv(f"PLAN_{plan_id.upper()}_BDT", str(plan["price_bdt"])))
     plan["billing_period"] = os.getenv("BILLING_PERIOD") or None
@@ -189,8 +188,38 @@ PLAN_FEATURES = {
 }
 
 
+def _parse_subscription_expiry(value):
+    if not value:
+        return None
+    try:
+        expiry = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=timezone.utc)
+        return expiry.astimezone(timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def get_effective_plan_id(subscription: dict | None, now=None) -> str:
+    """Return the plan that is actually entitled right now, otherwise FREE."""
+    if not subscription:
+        return "free"
+    if subscription.get("status") not in {"active", "active_dev"}:
+        return "free"
+
+    plan_id = subscription.get("plan", "free")
+    if plan_id not in PLANS:
+        return "free"
+
+    expiry = _parse_subscription_expiry(subscription.get("expires_at"))
+    current_time = now or datetime.now(timezone.utc)
+    if expiry and expiry <= current_time:
+        return "free"
+    return plan_id
+
+
 def get_plan(plan_id: str) -> dict:
-    return PLANS.get(plan_id, PLANS["start"])
+    return PLANS.get(plan_id, PLANS["free"])
 
 
 def get_entitlements(plan_id: str) -> dict:

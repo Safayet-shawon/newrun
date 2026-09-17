@@ -44,9 +44,11 @@ import conversational_commerce
 import commerce_hardening
 import production_ops
 import connector_execution
+import courier_status
 import growth_os
 
 subscription_tokens.install_seller_expiry_guard(seller)
+production_ops._safe_provider_status = lambda provider, payload: courier_status.normalize(payload)
 
 store_importer.scan_store_sync = deep_catalog_scanner.deep_scan_sync
 browser_store_scanner.composite_scan_sync = deep_catalog_scanner.deep_scan_sync
